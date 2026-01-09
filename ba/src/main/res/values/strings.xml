@@ -1,0 +1,15 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">Body Camera</string>
+    <string name="sdk_model_530" tools:ignore="MissingTranslation">530</string>
+    <string name="sdk_model_Z50" tools:ignore="MissingTranslation">Z50</string>
+
+    <!-- VeinResult strings -->
+    <string name="auth_success">認証成功\nドア開錠します</string>
+    <string name="auth_failed">認証失敗</string>
+    <string name="btn_finish">終了</string>
+    <string name="btn_retry">再実行</string>
+    <string name="btn_back">戻る</string>
+    <string name="label_name">氏名:</string>
+    <string name="label_id">ID:</string>
+
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 允许访问应用私有缓存目录
+    <external-cache-path
+        name="external_cache"
+        path="video/" />-->
+
+    <!-- 可选：允许整个 external-cache 目录
+    <external-cache-path
+        name="external_cache"
+        path="." />
+-->
+    <external-path
+        name="external_path"
+        path="." />
+
+</paths>

@@ -1,0 +1,97 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    compileSdk rootProject.ext.compileSdk
+
+    defaultConfig {
+        //設定
+        buildConfigField "String", "DEVICE_API_BASE_URL", "\"http://10.200.2.46:5000\""
+        buildConfigField "String", "DEVICE_API_AUTHMODE_PATH", "\"/api/device/getAuthMode\""
+        buildConfigField "String", "DEVICE_API_AUTHLOG_PATH", "\"/api/auth/logs\""
+
+        applicationId "com.bodycamera.tests"
+        minSdk rootProject.ext.minSdk
+        targetSdk rootProject.ext.targetSdk
+        versionCode rootProject.ext.versionCode
+        versionName rootProject.ext.versionName
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        
+        ndk {
+            abiFilters "armeabi-v7a" ,"arm64-v8a"
+        }
+
+    }
+
+    signingConfigs {
+        release {
+            keyAlias 'android'
+            keyPassword 'bodycamera'
+            storeFile file('D:/my/bodyCameraV2/app.jks')
+            storePassword 'bodycamera'
+        }
+        debug {
+            storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+        debug{
+            signingConfig signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility rootProject.ext.sourceCompatibility
+        targetCompatibility rootProject.ext.targetCompatibility
+    }
+    kotlinOptions {
+        jvmTarget = rootProject.ext.jvmTarget
+    }
+    buildFeatures {
+        viewBinding true
+    }
+
+    lintOptions {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+    namespace 'com.bodycamera.tests'
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libs']
+            aidl.srcDirs = ['src/main/aidl']
+        }
+    }
+
+    buildFeatures {
+        aidl true
+    }
+
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar','*.aar'])
+    implementation "androidx.core:core-ktx:${kotlinCoreVersion}"
+    implementation "androidx.appcompat:appcompat:${appcompatVersion}"
+    implementation "com.google.android.material:material:${materialVersion}"
+    implementation "androidx.constraintlayout:constraintlayout:${constraintlayoutVersion}"
+    implementation "androidx.databinding:databinding-runtime:${databindingVersion}"
+    testImplementation "junit:junit:${junitVersion}"
+    androidTestImplementation "androidx.test.ext:junit:${extjunitVersion}"
+    androidTestImplementation "androidx.test.espresso:espresso-core:${espressoCoreVersion}"
+    implementation "com.google.code.gson:gson:${gsonVersion}"
+    implementation("com.squareup.okhttp3:okhttp:4.10.0")
+
+}

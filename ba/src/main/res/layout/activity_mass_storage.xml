@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_marginTop="32dp"
+            android:layout_gravity="center"
+            android:layout_width="wrap_content"
+            android:textSize="18sp"
+
+            android:textColor="@color/green_pressed"
+            android:layout_height="wrap_content"
+            android:text="using device attach to pc first"/>
+
+        <Button
+            android:id="@+id/btn_mass_storage_start"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="16dp"
+            android:text="start" />
+
+        <Button
+            android:id="@+id/btn_mass_storage_stop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginBottom="16dp"
+            android:text="stop" />
+
+        <TextView
+            android:layout_gravity="center"
+            android:id="@+id/tv_is_mass_storage_set"
+            android:layout_width="wrap_content"
+            android:textSize="32sp"
+            android:layout_height="wrap_content"
+            android:text="unknown"/>
+
+    </LinearLayout>
+
+</FrameLayout>
