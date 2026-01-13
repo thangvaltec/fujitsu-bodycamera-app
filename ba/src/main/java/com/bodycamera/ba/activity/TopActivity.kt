@@ -1,5 +1,7 @@
 ﻿package com.bodycamera.ba.activity
 
+//
+
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
@@ -18,19 +20,6 @@ import com.bodycamera.ba.activity.Face3Activity.Companion.TAG
 import com.bodycamera.tests.R
 import com.bodycamera.tests.databinding.ActivityFace3Binding
 import com.yuy.api.manager.IBodyCameraService
-
-import android.annotation.SuppressLint
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Callback
-import okhttp3.Response
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
-import java.io.IOException
-//
-import com.bodycamera.ba.activity.DeviceSerialHelper
-import com.bodycamera.ba.activity.DeviceApiClient
 
 class TopActivity : AppCompatActivity() {
     // 1) HÀM LẤY SERIAL (ở trên)
@@ -75,8 +64,6 @@ class TopActivity : AppCompatActivity() {
             "UNKNOWN"
         }
     }*/
-
-
 
     /*@SuppressLint("PrivateApi")
     private fun getDeviceSerialNumber(): String {
@@ -140,100 +127,37 @@ class TopActivity : AppCompatActivity() {
         const val EXTRA_RETRY_FLOW = "RetryFlowMode"
     }
 
-    // 顔認証の要素
+    // 認証ボタンの定義
     lateinit var binding: ActivityFace3Binding
-    // 顔認証画面の接続データ
 
+    // BodyCameraサービスへのインターフェース
     private var mBodyCameraService: IBodyCameraService? = null
-    // 認証が失敗した場合の再実行なのか判定
+
+    // 認証失敗後の再試行フラグ
     private var pendingFaceAndVeinRetry = false
 
     // BodyCamera Service 接続管理
-    private val mConnection = object : ServiceConnection {
-        // 顔認証を開始
-        override fun onServiceConnected(name: ComponentName, service: IBinder) {
-            mBodyCameraService = IBodyCameraService.Stub.asInterface(service)
-            Log.i(TAG, "onServiceConnected: mBodyCameraService=$mBodyCameraService")
-            //  再実行要求が保留中ならばここで処理する
+    private val mConnection =
+            object : ServiceConnection {
+                // サービス接続時
+                override fun onServiceConnected(name: ComponentName, service: IBinder) {
+                    mBodyCameraService = IBodyCameraService.Stub.asInterface(service)
+                    Log.i(TAG, "onServiceConnected: mBodyCameraService=$mBodyCameraService")
 
-            if (pendingFaceAndVeinRetry) {
-                pendingFaceAndVeinRetry = false
-                triggerFaceAndVeinRetry()
-            }
-        }
-
-        // 顔認証の終了
-        override fun onServiceDisconnected(name: ComponentName) {
-            Log.i(TAG, "onServiceDisconnected")
-            mBodyCameraService = null
-        }
-    }
-
-    // 本画面の初期表示
-    /*override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        Log.e("DEBUG_CHECK", "onCreate STARTED")
-
-        binding = ActivityFace3Binding.inflate(layoutInflater)
-        setContentView(R.layout.activity_top)
-        Log.e("DEBUG_CHECK", "Layout is set")
-
-        // 1. serial取得処理
-        val serial = getDeviceSerialNumber()
-        Log.d("SERIAL_TEST", "Serial = $serial")
-        //Serial表示/非表示
-        //Toast.makeText(this, "Serial: $serial", Toast.LENGTH_LONG).show()
-
-        // 2. Gửi serial lên server
-        sendSerialToServer(serial) { authMode ->
-            runOnUiThread {
-                Log.d("API", "authMode from server = $authMode")
-
-                if (authMode == null) {
-                    Toast.makeText(
-                        this@TopActivity,
-                        "サーバーから認証モード（authMode）を取得できませんでした。",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@runOnUiThread
+                    // 再試行が保留中の場合はここで実行
+                    if (pendingFaceAndVeinRetry) {
+                        pendingFaceAndVeinRetry = false
+                        triggerFaceAndVeinRetry()
+                    }
                 }
 
-                // メッセージだけ作成
-                val msg = when (authMode) {
-                    0 -> "顔認証モード"
-                    1 -> "静脈認証モード"
-                    2 -> "顔＋静脈認証モード"
-                    else -> "authMode が不正のため、暫定的に『顔認証』を使用します。"
-                }
-
-                //メッセージ表示時間と位置
-                Log.d("API", "Toast message = $msg")
-                //Toast.makeText(this@TopActivity, msg, Toast.LENGTH_LONG).show()
-                Toast.makeText(this@TopActivity, msg, Toast.LENGTH_SHORT).show()
-                // ★ Flow3 対策：
-                // 顔認証結果(ResultName/ResultID)を持って TopActivity に戻ってきた場合は、
-                // ここで再度 顔認証アプリ を起動しない。initView() に任せて Palm に進ませる。
-                if (authMode == 2 && hasFaceResultExtra()) {
-                    // すでに「顔＋静脈」の途中（顔認証は終わっている）なので、
-                    // AuthMode だけ念のため保存して、あとは initView() に任せる。
-                    saveAuthMode("FaceAndVein")
-                    Log.d("FLOW3", "Face result already exists → skip auto start for Flow3 in onCreate()")
-                } else {
-                    // それ以外（初回起動 or Flow1/2）は今まで通り自動フロー開始
-                    startAuthFlowByMode(authMode)
+                // サービス切断時
+                override fun onServiceDisconnected(name: ComponentName) {
+                    Log.i(TAG, "onServiceDisconnected")
+                    mBodyCameraService = null
                 }
             }
-        }
 
-        // 3. Giữ nguyên phần này
-
-        // Kết nối BodyCamera Service
-        bindService()
-        initView()
-        handleRetryIntent(intent)
-        handleFaceResultIntent(intent)
-        setClickListeners()
-    }*/
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.e("DEBUG_CHECK", "onCreate STARTED")
@@ -242,221 +166,90 @@ class TopActivity : AppCompatActivity() {
         setContentView(R.layout.activity_top)
         Log.e("DEBUG_CHECK", "Layout is set")
 
-        // 1. 端末シリアル取得（共通 helper を使用）
-        val serial = DeviceSerialHelper.getDeviceSerial(this)
-        Log.d("SERIAL_TEST", "Serial = $serial")
-        // Serial の Toast を出したくない場合はコメントアウトでOK
-        // Toast.makeText(this, "Serial: $serial", Toast.LENGTH_LONG).show()
+        // 1. 設定画面(SettingsActivity)から保存されたデバイスIDを取得
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
+        val serial = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
 
-        // 2. サーバーへシリアル送信 → authMode 取得
+        if (serial.isEmpty()) {
+            Toast.makeText(this, "設定画面でデバイスIDを設定してください", Toast.LENGTH_LONG).show()
+        }
+
+        Log.d("SERIAL_TEST", "Serial (Manual) = $serial")
+
+        // 2. サーバーへシリアル番号を送信し、認証モード(authMode)を取得
         val apiClient = DeviceApiClient()
         apiClient.getAuthMode(serial) { authMode ->
             runOnUiThread {
                 Log.d("API", "authMode from server = $authMode")
-
                 if (authMode == null) {
-                    Toast.makeText(
-                        this@TopActivity,
-                        "サーバーから認証モード（authMode）を取得できませんでした。",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@runOnUiThread
-                }
-
-                // 表示メッセージ
-                val msg = when (authMode) {
-                    0 -> "顔認証モード"
-                    1 -> "静脈認証モード"
-                    2 -> "顔＋静脈認証モード"
-                    else -> "authMode が不正のため、暫定的に『顔認証』を使用します。"
-                }
-
-                Log.d("API", "Toast message = $msg")
-                Toast.makeText(this@TopActivity, msg, Toast.LENGTH_SHORT).show()
-
-                // ★ Flow3 対策を今使っているなら、ここをそのまま残す:
-                if (authMode == 2 && hasFaceResultExtra()) {
-                    saveAuthMode("FaceAndVein")
-                    Log.d("FLOW3", "Face result already exists → skip auto start for Flow3 in onCreate()")
+                    Toast.makeText(this@TopActivity, "認証モードの取得に失敗しました", Toast.LENGTH_LONG).show()
                 } else {
-                    startAuthFlowByMode(authMode)
+                    val msg =
+                            when (authMode) {
+                                0 -> "顔認証モード"
+                                1 -> "静脈認証モード"
+                                2 -> "顔＋静脈認証モード"
+                                else -> "不明なモード -> 顔認証を使用"
+                            }
+                    Toast.makeText(this@TopActivity, msg, Toast.LENGTH_SHORT).show()
+
+                    // Flow3 (顔+静脈) の際、顔認証結果を持って戻ってきた場合は自動遷移しない
+                    if (authMode == 2 && hasFaceResultExtra()) {
+                        saveAuthMode("FaceAndVein")
+                    } else {
+                        // それ以外は自動で認証フローを開始
+                        startAuthFlowByMode(authMode)
+                    }
                 }
             }
         }
 
-        // 3. 既存処理はそのまま
-        bindService()
+        // 3. その他初期化処理
+        bindBodyCameraService()
         initView()
         handleRetryIntent(intent)
         handleFaceResultIntent(intent)
+
+        // ボタンのクリックリスナー設定
         setClickListeners()
     }
 
+    // ...
 
-    // アプリを終了した際に実行
-    override fun onDestroy() {
-        super.onDestroy()
-        try { unbindService(mConnection) } catch (_: Exception) {}
+    private fun initView() {
+        // UI初期化（必要に応じて実装）
     }
 
-    // 別の画面から戻った後の処理
-    override fun onResume() {
-        super.onResume()
-        // showFaceResultDialog() 顔認証のみの旧仕様は未使用
+    private fun handleRetryIntent(intent: Intent?) {
+        val retryMode = intent?.getStringExtra(EXTRA_RETRY_FLOW)
+        if (retryMode != null) {
+            Log.d(TAG, "Retry Flow detected: $retryMode")
+            // Retryロジックが必要な場合はここに記述
+        }
     }
 
-    // Intentオブジェクトを編集できるように設定
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        if (intent == null) return
-        setIntent(intent)
-        handleFaceResultIntent(intent) // 顔のみフローの結果が Intent で返ってきた場合に対応
-        handleRetryIntent(intent)
-    }
-
-    // PalmSecure を含む各フローの結果を受け取る（Flow1 / Flow2 / Flow3 共通）
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-
-        // 顔認証（Flow1）の結果受信 → 共通結果画面へ転送
-        if (requestCode == REQUEST_FACE) {
-            if (resultCode != RESULT_OK || data == null) return
-            val resultName = data.getStringExtra("ResultName")
-            val resultID = data.getStringExtra("ResultID")
+    private fun handleFaceResultIntent(intent: Intent?) {
+        if (hasFaceResultExtra()) {
+            val resultName = intent?.getStringExtra("ResultName")
+            val resultID = intent?.getStringExtra("ResultID")
+            Log.d(TAG, "Result received: Name=$resultName, ID=$resultID")
             forwardFaceResultToVeinResult(resultName, resultID)
-            return
-        }
-
-        // PalmSecure 以外は無視
-        if (requestCode != REQUEST_PALMSECURE) return
-        if (resultCode != RESULT_OK || data == null) return
-
-        // PalmSecure 結果
-        val veinResult = data.getStringExtra("vein_result")
-        val veinId = data.getStringExtra("vein_id")
-
-        val resultName = data.getStringExtra("ResultName")
-        val resultID = data.getStringExtra("ResultID")
-
-        val mode = currentAuthMode()
-
-        Log.i(TAG, "PalmSecure result: mode=$mode veinResult=$veinResult veinId=$veinId")
-
-        // Flow1（顔のみ）: 直接結果画面へ
-        if (mode == "Face") {
-            val intent = CreateIntent(
-                veinResult = if (!resultID.isNullOrEmpty()) "OK" else "NG",
-                veinId = resultID,
-                resultName = resultName
-            )
-            startActivity(intent)
-            finish()
-            return
-        }
-
-        // Flow2（静脈のみ）/ Flow3（顔＋静脈）: 直接結果画面へ
-        val intent = CreateIntent(
-            veinResult = veinResult,
-            veinId = veinId,
-            resultName = null
-        )
-        startActivity(intent)
-        finish()
-    }
-
-    private fun CreateIntent(
-        veinResult: String?,
-        veinId: String?,
-        resultName: String?
-    ): Intent {
-
-        return Intent(this, VeinResultActivity::class.java).apply {
-            putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, veinResult)
-            putExtra(VeinResultActivity.EXTRA_VEIN_ID, veinId)
-            putExtra("ResultName", resultName)
-            putExtra(
-                VeinResultActivity.EXTRA_AUTH_MODE,
-                getSharedPreferences("AuthMode", MODE_PRIVATE)
-                    .getString("AuthName", "")
-            )
         }
     }
 
-    // ボディカメラService 接続先設定
-    private fun bindService() {
-        val intent = Intent().apply {
-            action = "com.yuy.api.manager.IBodyCameraService"
-            `package` = "com.bodycamera.nettysocket"
+    // BodyCamera Service へのバインド処理
+    private fun bindBodyCameraService() {
+        val intent = Intent("com.bodycamera.service.BodyCameraService")
+        intent.setPackage("com.bodycamera.service")
+
+        // サービスのバインドを試みる
+        val bound = bindService(intent, mConnection, BIND_AUTO_CREATE)
+        if (!bound) {
+            Log.e(TAG, "Failed to bind to BodyCameraService")
+            Toast.makeText(this, "BodyCameraサービスへの接続に失敗しました", Toast.LENGTH_LONG).show()
+        } else {
+            Log.d(TAG, "Binding to BodyCameraService...")
         }
-        bindService(intent, mConnection, BIND_AUTO_CREATE)
-    }
-
-    // フロー3: 顔認証結果受信後の自動処理
-    fun initView() {
-        val authName = getSharedPreferences("AuthMode", MODE_PRIVATE)
-            .getString("AuthName", "") ?: ""
-
-        val resultName = intent.getStringExtra("ResultName")
-        val resultID = intent.getStringExtra("ResultID")
-
-        // 顔認証結果が渡された場合 → 全画面メッセージ + PalmSecure自動起動
-        if ((!resultName.isNullOrEmpty() || !resultID.isNullOrEmpty())
-            && authName == "FaceAndVein"
-        ) {
-            showFullScreenMessageAndLaunchPalmSecure(
-                "顔認証成功\n次は静脈認証",
-                resultID
-            )
-        }
-    }
-
-    private fun handleRetryIntent(incomingIntent: Intent?) {
-        if (incomingIntent == null) return
-
-        val retryFlow = incomingIntent.getStringExtra(EXTRA_RETRY_FLOW) ?: return
-        incomingIntent.removeExtra(EXTRA_RETRY_FLOW)
-
-        when (retryFlow) {
-            "Vein" -> {
-                saveAuthMode("Vein")
-                saveFaceResultPending(false)
-                //  静脈のみ再実行は即座にPalmSecureを再起動
-                launchPalmSecure(
-                    mode = "identify",
-                    faceId = null,
-                    autoStart = true,
-                    returnResult = true,
-                    fromExternal = true
-                )
-            }
-
-            "FaceAndVein" -> {
-                saveAuthMode("FaceAndVein")
-                saveFaceResultPending(false)
-                //  顔＋静脈の再実行は顔認証からやり直す
-                triggerFaceAndVeinRetry()
-            }
-        }
-    }
-
-    /**
-     * 顔認証（Flow1）が別アプリから Intent で結果を返すケースをハンドリング
-     * - currentAuthMode() == "Face" のときのみ結果画面へ転送
-     */
-    private fun handleFaceResultIntent(incomingIntent: Intent?) {
-        if (incomingIntent == null) return
-
-        val resultName = incomingIntent.getStringExtra("ResultName")
-        val resultId = incomingIntent.getStringExtra("ResultID")
-
-        if (resultName.isNullOrEmpty() && resultId.isNullOrEmpty()) return
-        if (currentAuthMode() != "Face") return
-
-        // ループ防止のため処理後は extra を削除
-        incomingIntent.removeExtra("ResultName")
-        incomingIntent.removeExtra("ResultID")
-
-        forwardFaceResultToVeinResult(resultName, resultId)
     }
 
     private fun setClickListeners() {
@@ -464,26 +257,22 @@ class TopActivity : AppCompatActivity() {
         val btnFace = findViewById<Button>(R.id.btnFaceAuth)
         val btnVein = findViewById<Button>(R.id.btnVeinAuth)
         val btnFaceAndVein = findViewById<Button>(R.id.btnFaceAndVeinAuth)
+        val btnSettings = findViewById<Button>(R.id.btnSettings) // Added
 
-        // フロー1: 顔認証のみ
+        // Settings
+        btnSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+
+        // フロー1: 顔認証のみ (Modular New Flow)
         btnFace.setOnClickListener {
             saveAuthMode("Face")
-            saveFaceResultPending(true)
-            launchFaceRecognitionForFaceOnly()
+            startActivity(Intent(this, NewFaceAuthActivity::class.java))
         }
 
         // フロー2: 静脈認証のみ
         btnVein.setOnClickListener {
             saveAuthMode("Vein")
             saveFaceResultPending(false)
-
-            launchPalmSecure(
-                mode = "identify",
-                faceId = null,
-                autoStart = true,
-                returnResult = true,
-                fromExternal = true
-            )
+            launchPalmSecure("identify", null, true, true, true)
         }
 
         // フロー3: 顔＋静脈認証
@@ -501,10 +290,11 @@ class TopActivity : AppCompatActivity() {
         Log.i(TAG, "launchFaceRecognition: size=${list?.size}")
 
         if (list != null && list.size == 2) {
-            val intent = Intent().apply {
-                component = ComponentName(list[0], list[1])
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
+            val intent =
+                    Intent().apply {
+                        component = ComponentName(list[0], list[1])
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
             startActivity(intent)
         } else {
             Toast.makeText(this, "Face recognition app not available", Toast.LENGTH_SHORT).show()
@@ -522,13 +312,12 @@ class TopActivity : AppCompatActivity() {
         Log.i(TAG, "launchFaceRecognitionForFaceOnly: size=${list?.size}")
 
         if (list != null && list.size == 2) {
-            val intent = Intent().apply {
-                component = ComponentName(list[0], list[1])
-            }
+            val intent = Intent().apply { component = ComponentName(list[0], list[1]) }
             try {
                 startActivityForResult(intent, REQUEST_FACE)
             } catch (e: ActivityNotFoundException) {
-                Toast.makeText(this, "Face recognition app not available", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Face recognition app not available", Toast.LENGTH_SHORT)
+                        .show()
                 saveFaceResultPending(false)
             }
         } else {
@@ -537,40 +326,43 @@ class TopActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 顔認証（Flow1）の結果を共通結果画面へ転送
-     */
+    /** 顔認証（Flow1）の結果を共通結果画面へ転送 */
     private fun forwardFaceResultToVeinResult(resultName: String?, resultId: String?) {
-        val intent = Intent(this, VeinResultActivity::class.java).apply {
-            putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, if (!resultId.isNullOrEmpty()) "OK" else "NG")
-            putExtra(VeinResultActivity.EXTRA_VEIN_ID, resultId)
-            putExtra("ResultName", resultName)
-            putExtra("ResultID", resultId)
-            putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "Face")
-        }
+        val intent =
+                Intent(this, VeinResultActivity::class.java).apply {
+                    putExtra(
+                            VeinResultActivity.EXTRA_VEIN_RESULT,
+                            if (!resultId.isNullOrEmpty()) "OK" else "NG"
+                    )
+                    putExtra(VeinResultActivity.EXTRA_VEIN_ID, resultId)
+                    putExtra("ResultName", resultName)
+                    putExtra("ResultID", resultId)
+                    putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "Face")
+                }
         startActivity(intent)
         finish()
     }
 
     // PalmSecure 起動（フロー2 & フロー3）
     private fun launchPalmSecure(
-        mode: String,
-        faceId: String?,
-        autoStart: Boolean,
-        returnResult: Boolean,
-        fromExternal: Boolean
+            mode: String,
+            faceId: String?,
+            autoStart: Boolean,
+            returnResult: Boolean,
+            fromExternal: Boolean
     ) {
-        val intent = Intent().apply {
-            setClassName(
-                "com.fujitsu.frontech.palmsecure_gui_sample",
-                "com.fujitsu.frontech.palmsecure_gui_sample.MainActivity"
-            )
-            putExtra("mode", mode)
-            if (!faceId.isNullOrEmpty()) putExtra("face_id", faceId)
-            putExtra("auto_start", autoStart)
-            putExtra("return_result", returnResult)
-            putExtra("from_external", fromExternal)
-        }
+        val intent =
+                Intent().apply {
+                    setClassName(
+                            "com.fujitsu.frontech.palmsecure_gui_sample",
+                            "com.fujitsu.frontech.palmsecure_gui_sample.MainActivity"
+                    )
+                    putExtra("mode", mode)
+                    if (!faceId.isNullOrEmpty()) putExtra("face_id", faceId)
+                    putExtra("auto_start", autoStart)
+                    putExtra("return_result", returnResult)
+                    putExtra("from_external", fromExternal)
+                }
 
         try {
             startActivityForResult(intent, REQUEST_PALMSECURE)
@@ -581,9 +373,7 @@ class TopActivity : AppCompatActivity() {
 
     // 全画面メッセージ + 自動でPalmSecure起動（TopActivity非表示）
     private fun showFullScreenMessageAndLaunchPalmSecure(message: String, faceId: String?) {
-        val dialog = AlertDialog.Builder(this)
-            .setCancelable(false)
-            .create()
+        val dialog = AlertDialog.Builder(this).setCancelable(false).create()
 
         val view = layoutInflater.inflate(android.R.layout.simple_list_item_1, null)
 
@@ -605,16 +395,20 @@ class TopActivity : AppCompatActivity() {
         dialog.show()
 
         // 3.5秒後にPalmSecure起動
-        Handler(Looper.getMainLooper()).postDelayed({
-            dialog.dismiss()
-            launchPalmSecure(
-                mode = "verify",
-                faceId = faceId,
-                autoStart = true,
-                returnResult = true,
-                fromExternal = true
-            )
-        }, 3500)
+        Handler(Looper.getMainLooper())
+                .postDelayed(
+                        {
+                            dialog.dismiss()
+                            launchPalmSecure(
+                                    mode = "verify",
+                                    faceId = faceId,
+                                    autoStart = true,
+                                    returnResult = true,
+                                    fromExternal = true
+                            )
+                        },
+                        3500
+                )
     }
 
     // 認証失敗した場合、認証を再実行
@@ -642,11 +436,11 @@ class TopActivity : AppCompatActivity() {
                 saveAuthMode("Vein")
                 saveFaceResultPending(false)
                 launchPalmSecure(
-                    mode = "identify",
-                    faceId = null,
-                    autoStart = true,
-                    returnResult = true,
-                    fromExternal = true
+                        mode = "identify",
+                        faceId = null,
+                        autoStart = true,
+                        returnResult = true,
+                        fromExternal = true
                 )
             }
             2 -> {
@@ -672,25 +466,19 @@ class TopActivity : AppCompatActivity() {
         return !resultName.isNullOrEmpty() || !resultID.isNullOrEmpty()
     }
 
-
-
     private fun currentAuthMode(): String {
-        return getSharedPreferences("AuthMode", MODE_PRIVATE)
-            .getString("AuthName", "") ?: ""
+        return getSharedPreferences("AuthMode", MODE_PRIVATE).getString("AuthName", "") ?: ""
     }
 
     private fun saveAuthMode(mode: String) {
-        getSharedPreferences("AuthMode", MODE_PRIVATE)
-            .edit()
-            .putString("AuthName", mode)
-            .apply()
+        getSharedPreferences("AuthMode", MODE_PRIVATE).edit().putString("AuthName", mode).apply()
     }
 
     // SharedPreferencesに顔認証結果表示を判断させる値(True, 又はFalse)を保存
     private fun saveFaceResultPending(pending: Boolean) {
         getSharedPreferences(PREF_FACE_FLOW, MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_FACE_PENDING, pending)
-            .apply()
+                .edit()
+                .putBoolean(KEY_FACE_PENDING, pending)
+                .apply()
     }
 }

@@ -76,26 +76,28 @@ Activity trung tâm xử lý toàn bộ luồng Face Auth mới.
 以下は、今回追加・修正したファイル群の処理フローの詳細説明です。TopActivityから認証完了までの流れを記述します。
 
 ### 1. メイン画面 (`TopActivity.kt`)
-認証フロー（新フロー）の起点です。
+アプリケーションのエントリーポイントです。
 
 *   **`onCreate()`**:
-    *   UI初期化を行います。
-    *   `setClickListeners()` を呼び出し、ボタン操作を監視します。
+    *   **初期化**: `setContentView` でレイアウトを表示します。
+    *   **サービス接続**: `bindBodyCameraService()` を呼び出し、ハードウェア制御用サービス (`IBodyCameraService`) に接続します。
+    *   **設定読み込み**: `SettingsActivity` で保存された `KEY_DEVICE_ID` を `SharedPreferences` から読み込みます。
+    *   **デバイス管理API**: 取得したシリアル番号を `DeviceApiClient` 経由でサーバーに送信し、認証モード (`authMode`) を取得します。
+    *   **リスナー設定**: `setClickListeners()` を呼び出し、各ボタンの動作を定義します。
 *   **`setClickListeners()`**:
-    *   **Settingsボタン**: `SettingsActivity` を起動し、設定画面を表示します。
-    *   **Face Authボタン (新フロー)**:
-        1.  認証モードを "Face" として保存します。
-        2.  `startActivity` で **`NewFaceAuthActivity`** を起動します。
-        3.  ここから新しい認証モジュールに処理が移譲されます。
+    *   **Settingsボタン**: `SettingsActivity` へ遷移します。
+    *   **顔認証ボタン**: 認証モードを "Face" に保存し、`NewFaceAuthActivity` を起動 (`startActivity`) します。
 
 ### 2. 設定画面 (`SettingsActivity.kt`)
-新フローで使用する接続先やIDを設定する画面です。
+サーバーURLやデバイスIDを設定する画面です。
 
-*   **`loadSettings()`**: 保存済みのURLとDevice IDを表示します。
-*   **`saveSettings()`**: 入力値を検証し、`SharedPreferences` に保存します。この値が後続の処理で使用されます。
+*   **`onCreate()`**:
+    *   `loadSettings()` を呼び出し、`SharedPreferences` から既存の設定値を読み込んで入力欄 (`EditText`) に表示します。
+*   **`btnSave.setOnClickListener`**:
+    *   `saveSettings()` を実行します。入力内容のバリデーション（空文字チェック）を行い、問題なければ `SharedPreferences` に保存して画面を閉じます (`finish()`)。
 
-### 3. 新顔認証フロー (`NewFaceAuthActivity.kt`)
-新しい顔認証ロジックを一括管理する中心的なActivityです。
+### 3. 顔認証フロー (`NewFaceAuthActivity.kt`)
+新しい顔認証ロジックを一括管理するActivityです。
 
 *   **`onCreate()`**:
     *   カメラ権限を確認 (`checkPermission`) します。
