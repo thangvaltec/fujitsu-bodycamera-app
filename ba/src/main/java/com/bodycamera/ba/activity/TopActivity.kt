@@ -286,20 +286,10 @@ class TopActivity : AppCompatActivity() {
 
     // 顔認証アプリ起動（フロー1 & フロー3）
     private fun launchFaceRecognition() {
-        val list = mBodyCameraService?.getFaceRecognitionPackageAndClass()
-        Log.i(TAG, "launchFaceRecognition: size=${list?.size}")
-
-        if (list != null && list.size == 2) {
-            val intent =
-                    Intent().apply {
-                        component = ComponentName(list[0], list[1])
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-            startActivity(intent)
-        } else {
-            Toast.makeText(this, "Face recognition app not available", Toast.LENGTH_SHORT).show()
-            saveFaceResultPending(false)
-        }
+        Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
+        val intent = Intent(this, NewFaceAuthActivity::class.java)
+        // Flow3のチェーン（顔→静脈）を実現するため、結果を待ちます
+        startActivityForResult(intent, REQUEST_FACE)
     }
 
     /**
@@ -307,23 +297,15 @@ class TopActivity : AppCompatActivity() {
      * - app側が setResult で ResultName / ResultID を返す前提
      * - TopActivity を finish せず onActivityResult で受け取る
      */
+    /**
+     * 顔認証（Flow1専用）を結果待ちで起動する
+     * - app側が setResult で ResultName / ResultID を返す前提
+     * - TopActivity を finish せず onActivityResult で受け取る
+     */
     private fun launchFaceRecognitionForFaceOnly() {
-        val list = mBodyCameraService?.getFaceRecognitionPackageAndClass()
-        Log.i(TAG, "launchFaceRecognitionForFaceOnly: size=${list?.size}")
-
-        if (list != null && list.size == 2) {
-            val intent = Intent().apply { component = ComponentName(list[0], list[1]) }
-            try {
-                startActivityForResult(intent, REQUEST_FACE)
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(this, "Face recognition app not available", Toast.LENGTH_SHORT)
-                        .show()
-                saveFaceResultPending(false)
-            }
-        } else {
-            Toast.makeText(this, "Face recognition app not available", Toast.LENGTH_SHORT).show()
-            saveFaceResultPending(false)
-        }
+        Log.i(TAG, "launchFaceRecognitionForFaceOnly: Switching to Internal NewFaceAuthActivity")
+        val intent = Intent(this, NewFaceAuthActivity::class.java)
+        startActivity(intent)
     }
 
     /** 顔認証（Flow1）の結果を共通結果画面へ転送 */
@@ -448,8 +430,8 @@ class TopActivity : AppCompatActivity() {
                 saveAuthMode("FaceAndVein")
                 saveFaceResultPending(false)
                 launchFaceRecognition()
-                // 顔認証アプリに遷移するので、この画面は閉じる
-                finish()
+                // finish()を削除: 結果を受け取ってPalmSecureを起動するため
+                // finish()
             }
             else -> {
                 // 不正値の場合は暫定的に「顔認証」を使用
@@ -480,5 +462,60 @@ class TopActivity : AppCompatActivity() {
                 .edit()
                 .putBoolean(KEY_FACE_PENDING, pending)
                 .apply()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        // PalmSecure認証からの戻り
+        if (requestCode == REQUEST_PALMSECURE) {
+            if (resultCode == RESULT_OK && data != null) {
+                // 結果取得 (PalmSecure仕様: "result" -> "OK"/"NG", "user_id" -> ID)
+                // キー名が異なる可能性があるため、複数パターンで確認します。
+                var resultStr = data.getStringExtra("result")
+                if (resultStr == null) {
+                    resultStr = data.getStringExtra("vein_result")
+                }
+                resultStr = resultStr ?: "NG" // どちらもなければNG
+
+                val userIdStr = data.getStringExtra("user_id") ?: data.getStringExtra("vein_id")
+
+                Log.d(TAG, "PalmSecure Result: $resultStr, ID: $userIdStr")
+
+                // 結果画面へ遷移
+                val intent =
+                        Intent(this, VeinResultActivity::class.java).apply {
+                            putExtra(
+                                    VeinResultActivity.EXTRA_VEIN_RESULT,
+                                    if (resultStr == "OK") "OK" else "NG"
+                            )
+                            putExtra(VeinResultActivity.EXTRA_VEIN_ID, userIdStr)
+                            putExtra(VeinResultActivity.EXTRA_AUTH_MODE, currentAuthMode())
+                        }
+                startActivity(intent)
+
+                // フロー完了後、TopActivityでの待機は不要なら finish() はせず、VeinResultActivityに任せます。
+                // ただし、TopActivity自体はバックグラウンドにあるべきならそのままでOK。
+            } else {
+                Log.d(TAG, "PalmSecure Canceled or Failed")
+                // キャンセルされた場合などは何もしない、あるいはトースト表示
+            }
+        }
+        // Face認証(Flow1 & Flow3)からの戻り
+        else if (requestCode == REQUEST_FACE) {
+            if (resultCode == RESULT_OK) {
+                val mode = currentAuthMode()
+                if (mode == "FaceAndVein") {
+                     // Flow3: 顔認証成功 → メッセージ表示 → 静脈認証へ
+                     val faceId = data?.getStringExtra("ResultID")
+                     showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", faceId)
+                } else {
+                     // Flow1: 顔認証のみ -> 結果画面へ
+                     val resultName = data?.getStringExtra("ResultName")
+                     val resultId = data?.getStringExtra("ResultID")
+                     forwardFaceResultToVeinResult(resultName, resultId)
+                }
+            }
+        }
     }
 }

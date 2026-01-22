@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.bodycamera.ba.faceauth.CameraCaptureStrategy
 import com.bodycamera.ba.faceauth.FaceCaptureStrategy
+import com.bodycamera.ba.faceauth.MakerAppCaptureStrategy
 import com.bodycamera.ba.network.FaceRecognitionApi
 import com.bodycamera.ba.network.model.FaceAuthResponse
 import com.google.gson.Gson
@@ -33,7 +34,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
 
     // 設定可能な戦略:
     // 来週Makerアプリに切り替える際は、CameraCaptureStrategyをMakerAppCaptureStrategyに置き換えてください。
-    private val captureStrategy: FaceCaptureStrategy = CameraCaptureStrategy()
+    private val captureStrategy: FaceCaptureStrategy = MakerAppCaptureStrategy()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,11 +88,13 @@ class NewFaceAuthActivity : AppCompatActivity() {
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        Log.d(TAG, "onActivityResult: req=$requestCode, res=$resultCode, data=${data != null}")
         val handled =
                 captureStrategy.onActivityResult(this, requestCode, resultCode, data) { file, error
                     ->
                     if (file != null) {
                         // Got image, send to server
+                        Toast.makeText(this, "Processing: ${file.absolutePath}", Toast.LENGTH_LONG).show()
                         processFaceImage(file)
                     } else {
                         // Failed to capture

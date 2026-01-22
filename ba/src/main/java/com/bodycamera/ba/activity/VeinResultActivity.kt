@@ -181,14 +181,14 @@ class VeinResultActivity : AppCompatActivity() {
 
         // 3. メッセージと類似度
         if (!message.isNullOrEmpty()) {
-            tvMessage.text = message
+            tvMessage.text = "メッセージ：$message"
             tvMessage.visibility = View.VISIBLE
         } else {
             tvMessage.visibility = View.GONE
         }
 
         if (!similarity.isNullOrEmpty()) {
-            tvSimilarity.text = "Similarity: $similarity%"
+            tvSimilarity.text = "識別スコア: $similarity%"
             tvSimilarity.visibility = View.VISIBLE
         } else {
             tvSimilarity.visibility = View.GONE

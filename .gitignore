@@ -43,3 +43,5 @@ google-services.json
 .tmp/
 caches/
 native/
+maker_sdk_doc/
+ba/src/main/java/com/bodycamera/ba/facepass

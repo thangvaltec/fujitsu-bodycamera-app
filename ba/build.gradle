@@ -82,7 +82,8 @@ android {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar','*.aar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
     implementation "androidx.core:core-ktx:${kotlinCoreVersion}"
     implementation "androidx.appcompat:appcompat:${appcompatVersion}"
     implementation "com.google.android.material:material:${materialVersion}"
