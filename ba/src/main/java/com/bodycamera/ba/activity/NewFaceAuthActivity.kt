@@ -290,32 +290,39 @@ class NewFaceAuthActivity : AppCompatActivity() {
     }
 
     private fun handleAuthResult(result: FaceAuthResponse) {
-        // 結果画面へ遷移します
-        val intent =
-                Intent(this, VeinResultActivity::class.java).apply {
-                    putExtra(VeinResultActivity.EXTRA_NEW_STATUS, result.status)
-                    putExtra(VeinResultActivity.EXTRA_NEW_MESSAGE, result.message)
-                    putExtra(VeinResultActivity.EXTRA_NEW_SIMILARITY, result.similarity)
-                    putExtra(VeinResultActivity.EXTRA_NEW_NAME, result.name)
-                    putExtra(VeinResultActivity.EXTRA_NEW_ID, result.realId)
-
-                    // トップ画面をクリアするためのフラグ
-                    addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT) // 必要に応じて
-                }
+        // TopActivityへ結果を返します (Flow 3のチェーンを継続するため)
+        val data = Intent().apply {
+            putExtra("ResultName", result.name)
+            putExtra("ResultID", result.realId)
+            putExtra("ResultStatus", result.status)
+            putExtra("ResultMessage", result.message)
+            putExtra("ResultSimilarity", result.similarity)
+        }
+        setResult(RESULT_OK, data)
+        
+        // Flow 1 の場合、TopActivity が finish していない前提で onActivityResult が走ります。
+        // もし TopActivity 経由ではなく単独で呼ばれた場合を考慮して、従来の結果遷移もコメントアウトで残します。
+        /*
+        val intent = Intent(this, VeinResultActivity::class.java).apply {
+            putExtra(VeinResultActivity.EXTRA_NEW_STATUS, result.status)
+            putExtra(VeinResultActivity.EXTRA_NEW_MESSAGE, result.message)
+            putExtra(VeinResultActivity.EXTRA_NEW_SIMILARITY, result.similarity)
+            putExtra(VeinResultActivity.EXTRA_NEW_NAME, result.name)
+            putExtra(VeinResultActivity.EXTRA_NEW_ID, result.realId)
+        }
         startActivity(intent)
+        */
+        
         finish()
     }
 
     private fun showErrorAndFinish(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-
-        // または、VeinResultActivityに失敗として表示します
-        val intent =
-                Intent(this, VeinResultActivity::class.java).apply {
-                    putExtra(VeinResultActivity.EXTRA_NEW_STATUS, -1)
-                    putExtra(VeinResultActivity.EXTRA_NEW_MESSAGE, message)
-                }
-        startActivity(intent)
+        // TopActivityへ失敗結果を返します
+        val data = Intent().apply {
+            putExtra("ResultStatus", -1)
+            putExtra("ResultMessage", message)
+        }
+        setResult(RESULT_OK, data) // RESULT_OK を使い、中身の Status で判断させます
         finish()
     }
 }

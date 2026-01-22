@@ -232,8 +232,11 @@ class TopActivity : AppCompatActivity() {
         if (hasFaceResultExtra()) {
             val resultName = intent?.getStringExtra("ResultName")
             val resultID = intent?.getStringExtra("ResultID")
-            Log.d(TAG, "Result received: Name=$resultName, ID=$resultID")
-            forwardFaceResultToVeinResult(resultName, resultID)
+            val status = intent?.getIntExtra("ResultStatus", 2) ?: 2
+            val message = intent?.getStringExtra("ResultMessage") ?: ""
+            val similarity = intent?.getStringExtra("ResultSimilarity")
+            Log.d(TAG, "Result received via Intent: Name=$resultName, ID=$resultID")
+            forwardFaceResultToVeinResultWithDetails(status, message, resultName, resultID, similarity)
         }
     }
 
@@ -265,7 +268,7 @@ class TopActivity : AppCompatActivity() {
         // フロー1: 顔認証のみ (Modular New Flow)
         btnFace.setOnClickListener {
             saveAuthMode("Face")
-            startActivity(Intent(this, NewFaceAuthActivity::class.java))
+            launchFaceRecognition() // Unified launcher
         }
 
         // フロー2: 静脈認証のみ
@@ -280,7 +283,7 @@ class TopActivity : AppCompatActivity() {
             saveAuthMode("FaceAndVein")
             saveFaceResultPending(false)
             launchFaceRecognition()
-            finish()
+            // finish() は削除: onActivityResult で結果を受け取って Vein 認証へ繋げるため
         }
     }
 
@@ -305,25 +308,10 @@ class TopActivity : AppCompatActivity() {
     private fun launchFaceRecognitionForFaceOnly() {
         Log.i(TAG, "launchFaceRecognitionForFaceOnly: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
-        startActivity(intent)
+        startActivityForResult(intent, REQUEST_FACE)
     }
 
-    /** 顔認証（Flow1）の結果を共通結果画面へ転送 */
-    private fun forwardFaceResultToVeinResult(resultName: String?, resultId: String?) {
-        val intent =
-                Intent(this, VeinResultActivity::class.java).apply {
-                    putExtra(
-                            VeinResultActivity.EXTRA_VEIN_RESULT,
-                            if (!resultId.isNullOrEmpty()) "OK" else "NG"
-                    )
-                    putExtra(VeinResultActivity.EXTRA_VEIN_ID, resultId)
-                    putExtra("ResultName", resultName)
-                    putExtra("ResultID", resultId)
-                    putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "Face")
-                }
-        startActivity(intent)
-        finish()
-    }
+
 
     // PalmSecure 起動（フロー2 & フロー3）
     private fun launchPalmSecure(
@@ -503,19 +491,55 @@ class TopActivity : AppCompatActivity() {
         }
         // Face認証(Flow1 & Flow3)からの戻り
         else if (requestCode == REQUEST_FACE) {
-            if (resultCode == RESULT_OK) {
+            if (resultCode == RESULT_OK && data != null) {
+                val status = data.getIntExtra("ResultStatus", -1)
+                val message = data.getStringExtra("ResultMessage") ?: ""
+                val resultName = data.getStringExtra("ResultName")
+                val resultId = data.getStringExtra("ResultID")
+                val similarity = data.getStringExtra("ResultSimilarity")
+
                 val mode = currentAuthMode()
                 if (mode == "FaceAndVein") {
-                     // Flow3: 顔認証成功 → メッセージ表示 → 静脈認証へ
-                     val faceId = data?.getStringExtra("ResultID")
-                     showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", faceId)
+                    if (status == 2) {
+                        // Flow3: 顔認証成功 → メッセージ表示 → 静脈認証へ
+                        showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId)
+                    } else {
+                        // Flow3: 顔認証失敗 → 直接結果画面へ（再試行ボタン付き）
+                        val intent = Intent(this, VeinResultActivity::class.java).apply {
+                            putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, "NG")
+                            putExtra(VeinResultActivity.EXTRA_VEIN_ID, resultId)
+                            putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "FaceAndVein")
+                            putExtra("ResultName", resultName)
+                            putExtra("ResultID", resultId)
+                        }
+                        startActivity(intent)
+                    }
                 } else {
-                     // Flow1: 顔認証のみ -> 結果画面へ
-                     val resultName = data?.getStringExtra("ResultName")
-                     val resultId = data?.getStringExtra("ResultID")
-                     forwardFaceResultToVeinResult(resultName, resultId)
+                    // Flow1: 顔認証のみ -> 結果表示画面へ
+                    forwardFaceResultToVeinResultWithDetails(status, message, resultName, resultId, similarity)
                 }
             }
         }
+    }
+
+    /** 顔認証（Flow1）の結果を詳細情報付きで結果画面へ転送 */
+    private fun forwardFaceResultToVeinResultWithDetails(status: Int, message: String, name: String?, id: String?, similarity: String?) {
+        val intent = Intent(this, VeinResultActivity::class.java).apply {
+            // モジュラー版の新しいキーを優先的にセット（VeinResultActivity.handleNewFaceAuthIntent用）
+            putExtra(VeinResultActivity.EXTRA_NEW_STATUS, status)
+            putExtra(VeinResultActivity.EXTRA_NEW_MESSAGE, message)
+            putExtra(VeinResultActivity.EXTRA_NEW_NAME, name)
+            putExtra(VeinResultActivity.EXTRA_NEW_ID, id)
+            putExtra(VeinResultActivity.EXTRA_NEW_SIMILARITY, similarity)
+            
+            // レガシーキーも念のためセット
+            putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, if (status == 2) "OK" else "NG")
+            putExtra("ResultName", name)
+            putExtra("ResultID", id)
+            putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "Face")
+        }
+        startActivity(intent)
+        // Flow 1 の場合は TopActivity は不要になったので終了
+        // finish() 
     }
 }
