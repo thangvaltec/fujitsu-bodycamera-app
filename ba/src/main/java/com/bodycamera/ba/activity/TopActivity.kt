@@ -138,25 +138,25 @@ class TopActivity : AppCompatActivity() {
 
     // BodyCamera Service 接続管理
     private val mConnection =
-            object : ServiceConnection {
-                // サービス接続時
-                override fun onServiceConnected(name: ComponentName, service: IBinder) {
-                    mBodyCameraService = IBodyCameraService.Stub.asInterface(service)
-                    Log.i(TAG, "onServiceConnected: mBodyCameraService=$mBodyCameraService")
+        object : ServiceConnection {
+            // サービス接続時
+            override fun onServiceConnected(name: ComponentName, service: IBinder) {
+                mBodyCameraService = IBodyCameraService.Stub.asInterface(service)
+                Log.i(TAG, "onServiceConnected: mBodyCameraService=$mBodyCameraService")
 
-                    // 再試行が保留中の場合はここで実行
-                    if (pendingFaceAndVeinRetry) {
-                        pendingFaceAndVeinRetry = false
-                        triggerFaceAndVeinRetry()
-                    }
-                }
-
-                // サービス切断時
-                override fun onServiceDisconnected(name: ComponentName) {
-                    Log.i(TAG, "onServiceDisconnected")
-                    mBodyCameraService = null
+                // 再試行が保留中の場合はここで実行
+                if (pendingFaceAndVeinRetry) {
+                    pendingFaceAndVeinRetry = false
+                    triggerFaceAndVeinRetry()
                 }
             }
+
+            // サービス切断時
+            override fun onServiceDisconnected(name: ComponentName) {
+                Log.i(TAG, "onServiceDisconnected")
+                mBodyCameraService = null
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -182,15 +182,15 @@ class TopActivity : AppCompatActivity() {
             runOnUiThread {
                 Log.d("API", "authMode from server = $authMode")
                 if (authMode == null) {
-                    Toast.makeText(this@TopActivity, "認証モードの取得に失敗しました", Toast.LENGTH_LONG).show()
+//                    Toast.makeText(this@TopActivity, "認証モードの取得に失敗しました", Toast.LENGTH_LONG).show()
                 } else {
                     val msg =
-                            when (authMode) {
-                                0 -> "顔認証モード"
-                                1 -> "静脈認証モード"
-                                2 -> "顔＋静脈認証モード"
-                                else -> "不明なモード -> 顔認証を使用"
-                            }
+                        when (authMode) {
+                            0 -> "顔認証モード"
+                            1 -> "静脈認証モード"
+                            2 -> "顔＋静脈認証モード"
+                            else -> "不明なモード -> 顔認証を使用"
+                        }
                     Toast.makeText(this@TopActivity, msg, Toast.LENGTH_SHORT).show()
 
                     // Flow3 (顔+静脈) の際、顔認証結果を持って戻ってきた場合は自動遷移しない
@@ -249,7 +249,7 @@ class TopActivity : AppCompatActivity() {
         val bound = bindService(intent, mConnection, BIND_AUTO_CREATE)
         if (!bound) {
             Log.e(TAG, "Failed to bind to BodyCameraService")
-            Toast.makeText(this, "BodyCameraサービスへの接続に失敗しました", Toast.LENGTH_LONG).show()
+//            Toast.makeText(this, "BodyCameraサービスへの接続に失敗しました", Toast.LENGTH_LONG).show()
         } else {
             Log.d(TAG, "Binding to BodyCameraService...")
         }
@@ -315,24 +315,24 @@ class TopActivity : AppCompatActivity() {
 
     // PalmSecure 起動（フロー2 & フロー3）
     private fun launchPalmSecure(
-            mode: String,
-            faceId: String?,
-            autoStart: Boolean,
-            returnResult: Boolean,
-            fromExternal: Boolean
+        mode: String,
+        faceId: String?,
+        autoStart: Boolean,
+        returnResult: Boolean,
+        fromExternal: Boolean
     ) {
         val intent =
-                Intent().apply {
-                    setClassName(
-                            "com.fujitsu.frontech.palmsecure_gui_sample",
-                            "com.fujitsu.frontech.palmsecure_gui_sample.MainActivity"
-                    )
-                    putExtra("mode", mode)
-                    if (!faceId.isNullOrEmpty()) putExtra("face_id", faceId)
-                    putExtra("auto_start", autoStart)
-                    putExtra("return_result", returnResult)
-                    putExtra("from_external", fromExternal)
-                }
+            Intent().apply {
+                setClassName(
+                    "com.fujitsu.frontech.palmsecure_gui_sample",
+                    "com.fujitsu.frontech.palmsecure_gui_sample.MainActivity"
+                )
+                putExtra("mode", mode)
+                if (!faceId.isNullOrEmpty()) putExtra("face_id", faceId)
+                putExtra("auto_start", autoStart)
+                putExtra("return_result", returnResult)
+                putExtra("from_external", fromExternal)
+            }
 
         try {
             startActivityForResult(intent, REQUEST_PALMSECURE)
@@ -351,7 +351,7 @@ class TopActivity : AppCompatActivity() {
             // 顔認証成功メッセージ
             text = message
             // テキストの属性を定義
-            textSize = 26f
+            textSize = 40f
             setTextColor(resources.getColor(R.color.white))
             gravity = android.view.Gravity.CENTER
             setPadding(60, 100, 60, 100)
@@ -366,19 +366,19 @@ class TopActivity : AppCompatActivity() {
 
         // 3.5秒後にPalmSecure起動
         Handler(Looper.getMainLooper())
-                .postDelayed(
-                        {
-                            dialog.dismiss()
-                            launchPalmSecure(
-                                    mode = "verify",
-                                    faceId = faceId,
-                                    autoStart = true,
-                                    returnResult = true,
-                                    fromExternal = true
-                            )
-                        },
-                        3500
-                )
+            .postDelayed(
+                {
+                    dialog.dismiss()
+                    launchPalmSecure(
+                        mode = "verify",
+                        faceId = faceId,
+                        autoStart = true,
+                        returnResult = true,
+                        fromExternal = true
+                    )
+                },
+                3500
+            )
     }
 
     // 認証失敗した場合、認証を再実行
@@ -406,11 +406,11 @@ class TopActivity : AppCompatActivity() {
                 saveAuthMode("Vein")
                 saveFaceResultPending(false)
                 launchPalmSecure(
-                        mode = "identify",
-                        faceId = null,
-                        autoStart = true,
-                        returnResult = true,
-                        fromExternal = true
+                    mode = "identify",
+                    faceId = null,
+                    autoStart = true,
+                    returnResult = true,
+                    fromExternal = true
                 )
             }
             2 -> {
@@ -447,9 +447,9 @@ class TopActivity : AppCompatActivity() {
     // SharedPreferencesに顔認証結果表示を判断させる値(True, 又はFalse)を保存
     private fun saveFaceResultPending(pending: Boolean) {
         getSharedPreferences(PREF_FACE_FLOW, MODE_PRIVATE)
-                .edit()
-                .putBoolean(KEY_FACE_PENDING, pending)
-                .apply()
+            .edit()
+            .putBoolean(KEY_FACE_PENDING, pending)
+            .apply()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -472,14 +472,14 @@ class TopActivity : AppCompatActivity() {
 
                 // 結果画面へ遷移
                 val intent =
-                        Intent(this, VeinResultActivity::class.java).apply {
-                            putExtra(
-                                    VeinResultActivity.EXTRA_VEIN_RESULT,
-                                    if (resultStr == "OK") "OK" else "NG"
-                            )
-                            putExtra(VeinResultActivity.EXTRA_VEIN_ID, userIdStr)
-                            putExtra(VeinResultActivity.EXTRA_AUTH_MODE, currentAuthMode())
-                        }
+                    Intent(this, VeinResultActivity::class.java).apply {
+                        putExtra(
+                            VeinResultActivity.EXTRA_VEIN_RESULT,
+                            if (resultStr == "OK") "OK" else "NG"
+                        )
+                        putExtra(VeinResultActivity.EXTRA_VEIN_ID, userIdStr)
+                        putExtra(VeinResultActivity.EXTRA_AUTH_MODE, currentAuthMode())
+                    }
                 startActivity(intent)
 
                 // フロー完了後、TopActivityでの待機は不要なら finish() はせず、VeinResultActivityに任せます。
@@ -531,7 +531,7 @@ class TopActivity : AppCompatActivity() {
             putExtra(VeinResultActivity.EXTRA_NEW_NAME, name)
             putExtra(VeinResultActivity.EXTRA_NEW_ID, id)
             putExtra(VeinResultActivity.EXTRA_NEW_SIMILARITY, similarity)
-            
+
             // レガシーキーも念のためセット
             putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, if (status == 2) "OK" else "NG")
             putExtra("ResultName", name)

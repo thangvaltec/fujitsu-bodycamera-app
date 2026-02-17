@@ -1,0 +1,60 @@
+{
+    "name": {
+        "path": "",
+        "link": ""
+    },
+    "algo_name": "FacePassRK3568人脸识别SDK",
+    "algo_type": "FacePass.RK3568 RGA1.3.2",
+    "version": "1.3.3",
+    "algo_version": "1.3.3",
+    "algo_desc": "FacePassAndroid人脸通行SDK(RGA1.3.2)",
+    "level": 2,
+    "sku_controls": [
+        {
+            "device_model": "RK3568",
+            "outer_device_model": "RK3568",
+            "cal_type_name": "RK3568",
+            "device_type": "sdk"
+        }
+    ],
+    "auth_limits": [
+        {
+            "auth_method": "video_channel",
+            "channel_calculate_ratio": 1,
+            "level": 1
+        }
+    ],
+    "pockets": [
+        {
+            "pocket_name": "FacePassAndroid人脸通行SDK ",
+            "pocket_type": "RK3568",
+            "pocket_version": "1.3.3",
+            "pocket_desc": "FacePassAndroid人脸通行SDK ",
+            "auth_limits": [],
+            "cards": [
+                {
+
+                    "card_name": "FacePassAndroid人脸通行SDK ",
+                    "card_type": "face_recg",
+                    "card_version": "1.3.3",
+                    "card_desc": "FacePassAndroid人脸通行SDK "
+                 }
+            ]
+        }
+    ],
+    "gpu": [
+        {
+            "quota": 1,
+            "vendor": "RK3568",
+            "accelerator": "RK3568",
+            "limit": 1,
+            "capacities": {
+                "stream_video_quota": 1,
+                "stream_capture_quota": 0,
+                "analyze_quota": 0
+            }
+        }
+    ],
+    "translation": {
+    }
+}

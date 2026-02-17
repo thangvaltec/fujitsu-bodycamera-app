@@ -145,6 +145,14 @@ Xử lý xong trong 110ms.
 App Maker đóng lại để trả kết quả về App chính.
 Hệ thống Android báo cáo một chút "phàn nàn" về việc dọn dẹp đồ họa (do App đóng quá nhanh).
 
+### 4. 2026/01/22 - Anti-Spoofing & Recovery Optimization (なりすまし防止 của Maker App)
+- **課題:** Ảnh chụp điện thoại vẫn có thể vượt qua và hệ thống bị kẹt (lag) sau khi phát hiện giả mạo。
+- **解決策:**
+  - **Buffer Cloning (Quan trọng nhất):** Phát hiện lỗi nghiêm trọng trong SDK mẫu là sử dụng chung bộ đệm camera (`mPicBuffer`). Khi SDK đang xử lý, camera đã ghi đè dữ liệu mới vào bộ đệm đó, gây sai lệch kết quả. Tôi đã thực hiện **Clone (sao chép)** dữ liệu ngay khi nhận được để đảm bảo tính toàn vẹn.
+  - **Hàng đợi & Phục hồi:** Giảm hàng đợi xuống 1 và dọn dẹp bộ nhớ ngay khi thấy Spoof, giúp máy phục hồi tức thì.
+  - **Siết chặt ngưỡng an ninh:** Nâng ngưỡng Liveness lên **95.0** và cấu hình IR lên **0.5** để chặn đứng màn hình điện thoại phát sáng.
+- **結果:** Chặn đứng các hành vi giả mạo bằng ảnh chụp/điện thoại một cách triệt để và phản hồi cực nhanh.
+
 ---
 
 ### 5. 作成・修正ファイル一覧 (File Summary)
@@ -160,3 +168,11 @@ Hệ thống Android báo cáo một chút "phàn nàn" về việc dọn dẹp 
 | **Main App** | `MakerAppCaptureStrategy.kt` | メインアプリ側の連携クラス。Maker Appの起動と返却されたURIからのデータ取得を担当。 |
 | **Main App** | `NewFaceAuthActivity.kt` | 顔認証画面のUI制御。キャプチャの実行依頼、API送信、および送信後のクリーンアップ処理を実装。 |
 | **Shared** | `report.md` | 本プロジェクトの全体フロー、生体検知メカニズム、および修正点をまとめた技術ドキュメント。 |
+
+---
+
+## 6. 2026/01/27 - リリース準備完了確認 (Final Release Check)
+- **TopActivity.kt:** 手動で復元され、認証フローの制御と結果転送ロジックが正常であることを確認しました。
+- **Face3Activity.kt:** `TopActivity` への参照が正しく解決され、ビルドエラーが解消されました。
+- **FacePassActivity.java:** 例外処理 (`FacePassException`) が追加され、Liveness Threshold (95.0) が確実に適用されるようになりました。
+- **結論:** **Valtec App** (旧Main) および **Maker App** ともにリリースビルド可能な状態です。

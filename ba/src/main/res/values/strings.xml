@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name">Body Camera</string>
+    <string name="app_name">認証デモ</string>
     <string name="sdk_model_530" tools:ignore="MissingTranslation">530</string>
     <string name="sdk_model_Z50" tools:ignore="MissingTranslation">Z50</string>
 
