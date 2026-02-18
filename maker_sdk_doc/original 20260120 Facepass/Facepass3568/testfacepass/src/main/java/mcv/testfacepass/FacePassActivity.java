@@ -151,6 +151,45 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     private static final int REQUIRED_PASS_COUNT = 1; // 1 = immediate capture on first PASS. Relying on IRConfig=0.5 for anti-spoof.
     private static final float LIVENESS_SCORE_MINIMUM = 95f; // Secondary threshold: even if SDK says PASS, reject if score < this value
 
+    /* リファクタリング: Broadcastアーキテクチャ追加 */
+    private static final String ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE";
+    private static final String ACTION_AUTH_RESULT = "com.bodycamera.ba.ACTION_AUTH_RESULT";
+    private boolean mIsVerifying = false; // API応答待ち中はスキャンを一時停止するフラグ
+
+    private final android.content.BroadcastReceiver authReceiver = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context context, android.content.Intent intent) {
+            String action = intent.getAction();
+            if (ACTION_AUTH_RESULT.equals(action)) {
+                boolean isSuccess = intent.getBooleanExtra("is_success", false);
+                String message = intent.getStringExtra("message");
+                
+                Log.d(DEBUG_TAG, "★ [受信] ACTION_AUTH_RESULT: Success=" + isSuccess + ", Msg=" + message);
+                
+                if (isSuccess) {
+                    Log.d(DEBUG_TAG, "★ [受信] 認証成功 → MakerApp終了");
+                    Toast.makeText(FacePassActivity.this, "Authentication Success", Toast.LENGTH_SHORT).show();
+                    finish(); // Maker App終了、以降はMain Appが処理する
+                } else {
+                    // 認証失敗 → リトライ
+                    String displayMsg = message != null ? message : "Verification Failed";
+                    final String finalMsg = displayMsg;
+                    Log.d(DEBUG_TAG, "★ [受信] 認証失敗 → リトライ開始: " + finalMsg);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                             Toast.makeText(FacePassActivity.this, finalMsg, Toast.LENGTH_LONG).show();
+                        }
+                    });
+                    
+                    // 状態リセット → 再スキャン許可
+                    mIsVerifying = false;
+                    mConsecutivePassCount = 0; // 連続PASS回数をリセット
+                }
+            }
+        }
+    };
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -158,16 +197,23 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         mDetectResultQueue = new ArrayBlockingQueue<RecognizeData>(5);
         initAndroidHandler();
 
-        // Retrieve params from Intent
+        // Intentからパラメータ取得
         Intent intent = getIntent();
         if (intent != null) {
             mServerUrl = intent.getStringExtra("server_url");
             mDeviceId = intent.getStringExtra("device_id");
             mPoliceId = intent.getStringExtra("police_id");
-            Log.d(DEBUG_TAG, "Received Params: URL=" + mServerUrl + ", DeviceID=" + mDeviceId);
+            Log.d(DEBUG_TAG, "★ [初期化] パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId);
         }
 
         /* 初始化界面 */
+        
+        // BroadcastReceiver登録
+        android.content.IntentFilter filter = new android.content.IntentFilter();
+        filter.addAction(ACTION_AUTH_RESULT);
+        registerReceiver(authReceiver, filter);
+        Log.d(DEBUG_TAG, "★ [初期化] BroadcastReceiver登録完了 (ACTION_AUTH_RESULT待機開始)");
+
         initView();
 
 
@@ -178,7 +224,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
         dbHelper = new DatabaseHelper(this);
 
-        // Fix: Lazy Init for direct launch from Ninsho (if MainActivity skipped)
+        // 修正: 認証画面から直接起動された場合のSDK遅延初期化
         if (FacePassManager.mFacePassHandler == null) {
             Log.e(DEBUG_TAG, "!!! SDK not initialized. Initializing now from onCreate... !!!");
             FacePassManager.getInstance().init(this);
@@ -431,6 +477,12 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         public void run() {
             while (!isInterrupt) {
                 try {
+                    // リファクタリング: API応答待ち中はスキャンを一時停止
+                    if (mIsVerifying) {
+                        Thread.sleep(100);
+                        continue;
+                    }
+                    
                     RecognizeData recognizeData = mDetectResultQueue.take();
                     long startTime = recognizeData.startTime;
                     
@@ -461,7 +513,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         // ★ Score log (printed BEFORE capture so it's always visible)
                                         Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (minimum: " + LIVENESS_SCORE_MINIMUM + ", threshold: " + result.livenessThreshold + ")");
                                         
-                                        // Anti-spoof: check score meets our higher minimum
+                                        // Anti-spoof: スコアが最低基準を満たすかチェック
                                         if (result.livenessScore < LIVENESS_SCORE_MINIMUM) {
                                             Log.w(DEBUG_TAG, "★ Score TOO LOW: " + result.livenessScore + " < " + LIVENESS_SCORE_MINIMUM + " → REJECTED (possible photo)");
                                             break; // Treat as failed - don't increment pass count
@@ -543,15 +595,15 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                                 Log.d(DEBUG_TAG, "Resized: " + bw + "x" + bh + " → " + newW + "x" + newH);
                                             }
 
-                                            // 4. メインアプリとの共有用キャッシュディレクトリに保存
+                                            // 4. 共有ディレクトリに保存 (Scoped Storage対策: 両アプリがアクセス可能な場所)
                                             String fileName = "face_" + System.currentTimeMillis() + ".jpg";
-                                            // Ensure cache dir exists
-                                            java.io.File cacheDir = getExternalCacheDir();
-                                            if (cacheDir == null) {
-                                                cacheDir = getCacheDir();
+                                            java.io.File sharedDir = new java.io.File(
+                                                android.os.Environment.getExternalStorageDirectory(), "FaceAuth");
+                                            if (!sharedDir.exists()) {
+                                                sharedDir.mkdirs();
                                             }
                                             
-                                            java.io.File destFile = new java.io.File(cacheDir, fileName);
+                                            java.io.File destFile = new java.io.File(sharedDir, fileName);
                                             
                                             java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
                                             boolean compressOk = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, jpegQuality, fos);
@@ -569,7 +621,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             final int finalW = bitmap.getWidth();
                                             final int finalH = bitmap.getHeight();
 
-                                            Log.d(DEBUG_TAG, "Capture SUCCESS: " + finalPath + " [" + finalW + "x" + finalH + "]");
+                                            Log.d(DEBUG_TAG, "★ [キャプチャ成功] 保存先: " + finalPath + " [" + finalW + "x" + finalH + "] (" + (destFile.length()/1024) + "KB)");;
 
                                             final long finalFileSize = destFile.length();
                                             mAndroidHandler.post(new Runnable() {
@@ -580,125 +632,34 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             });
 
                                             // ========================================
-                                            // Smart Retry: デリゲート経由でAPI検証
+                                            // リファクタリング: Main Appへ画像パスをBroadcast送信
                                             // ========================================
-                                            // ========================================
-                                            // Smart Retry: 内部でAPI検証 (Intentパラメータ使用)
-                                            // ========================================
-                                            if (mServerUrl != null && !mServerUrl.isEmpty()) {
-                                                Log.d(DEBUG_TAG, "★ API検証開始: " + finalPath);
-                                                
-                                                final java.io.File finalDestFile = destFile;
-                                                final android.graphics.Bitmap finalBitmap = bitmap;
-                                                
-                                                // バックグラウンドスレッドで実行
-                                                Log.d(DEBUG_TAG, "Calling FacePassApiHelper... URL=" + mServerUrl);
-                                                String responseJson = FacePassApiHelper.sendFaceRecognition(finalDestFile, mDeviceId, mPoliceId, mServerUrl);
-                                                Log.d(DEBUG_TAG, "FacePassApiHelper returned: " + (responseJson != null ? "JSON Data" : "NULL"));
-                                                
-                                                boolean apiSuccess = false;
-                                                String errorMessage = "Unknown Error";
+                                            
+                                            // 1. スキャン一時停止
+                                            mIsVerifying = true;
+                                            
+                                            // 2. Broadcast送信
+                                            Log.d(DEBUG_TAG, "★ [送信] ACTION_PROCESS_FACE → Main App: " + finalPath);
+                                            android.content.Intent intent = new android.content.Intent(ACTION_PROCESS_FACE);
+                                            intent.putExtra("image_path", finalPath);
+                                            sendBroadcast(intent);
+                                            
+                                            // 3. UIフィードバック表示
+                                            mAndroidHandler.post(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    Toast.makeText(FacePassActivity.this, "Verifying...", Toast.LENGTH_SHORT).show();
+                                                }
+                                            });
 
-                                                if (responseJson != null) {
-                                                    Log.d(DEBUG_TAG, "★ API Raw Response: " + responseJson);
-                                                    try {
-                                                        JSONObject json = new JSONObject(responseJson);
-                                                        int status = json.optInt("status", -1);
-                                                        String message = json.optString("message", "");
-                                                        Log.d(DEBUG_TAG, "★ API Parsed: status=" + status + ", message=" + message);
-                                                        
-                                                        if (status == 0) {
-                                                            apiSuccess = true;
-                                                        } else {
-                                                            errorMessage = message.isEmpty() ? "認証失敗 (status=" + status + ")" : message;
-                                                        }
-                                                    } catch (Exception e) {
-                                                        Log.e(DEBUG_TAG, "JSON Parse Error", e);
-                                                        errorMessage = "JSON Parse Error";
-                                                    }
-                                                } else {
-                                                    errorMessage = "Network Error or Timeout";
-                                                }
-
-                                                if (apiSuccess) {
-                                                    // ★ API検証成功 (status:0) → 結果を返してActivity終了
-                                                    Log.d(DEBUG_TAG, "★ API検証成功 →認証Appに結果返却");
-                                                    
-                                                    Intent resultIntent = new Intent();
-                                                    resultIntent.putExtra("api_result_json", responseJson);
-                                                    resultIntent.putExtra("image_path", finalPath);
-                                                    
-                                                    try {
-                                                        android.net.Uri contentUri = android.support.v4.content.FileProvider.getUriForFile(
-                                                                FacePassActivity.this,
-                                                                "mcv.testfacepass.fileprovider",
-                                                                finalDestFile);
-                                                        resultIntent.setData(contentUri);
-                                                        resultIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                                    } catch (Exception e) {
-                                                        Log.e(DEBUG_TAG, "FileProvider error", e);
-                                                    }
-                                                    
-                                                    setResult(Activity.RESULT_OK, resultIntent);
-                                                    finish();
-                                                    return;
-                                                } else {
-                                                    // ★ API検証失敗 (status!=0 or network error) → カメラ画面にエラー表示して再試行
-                                                    Log.w(DEBUG_TAG, "★ API検証NG → カメラ画面でエラー表示, 自動リトライ: " + errorMessage);
-                                                    
-                                                    final String finalMessage = errorMessage;
-                                                    runOnUiThread(new Runnable() {
-                                                        @Override
-                                                        public void run() {
-                                                            Toast.makeText(FacePassActivity.this, finalMessage, Toast.LENGTH_LONG).show();
-                                                        }
-                                                    });
-                                                    
-                                                    // パスカウントリセット (再検出を要求)
-                                                    mConsecutivePassCount = 0;
-                                                    
-                                                    // 検出キュークリア (新しいフレームで再開)
-                                                    mDetectResultQueue.clear();
-                                                    
-                                                    // 一時ファイル削除
-                                                    try {
-                                                        if (finalDestFile.exists()) finalDestFile.delete();
-                                                    } catch (Exception e) {
-                                                        Log.e(DEBUG_TAG, "一時ファイル削除エラー", e);
-                                                    }
-                                                    
-                                                    // Bitmapメモリ解放
-                                                    if (finalBitmap != null && !finalBitmap.isRecycled()) {
-                                                        finalBitmap.recycle();
-                                                    }
-                                                    
-                                                    Log.d(DEBUG_TAG, "★ 再試行準備完了 → カメラスキャン継続");
-                                                    // RecognizeThreadのwhileループが自動的に継続
-                                                }
-                                                
-                                            } else {
-                                                // フォールバック: デリゲート未設定時は従来動作
-                                                Log.d(DEBUG_TAG, "デリゲート未設定 → 従来のfinish動作");
-                                                
-                                                Intent resultIntent = new Intent();
-                                                resultIntent.putExtra("image_path", finalPath);
-                                                
-                                                try {
-                                                    android.net.Uri contentUri = android.support.v4.content.FileProvider.getUriForFile(
-                                                            FacePassActivity.this,
-                                                            "mcv.testfacepass.fileprovider",
-                                                            destFile);
-                                                    resultIntent.setData(contentUri);
-                                                    resultIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                                    Log.d(DEBUG_TAG, "URI Granted: " + contentUri.toString());
-                                                } catch (Exception e) {
-                                                    Log.e(DEBUG_TAG, "FileProvider error", e);
-                                                }
-                                                
-                                                setResult(Activity.RESULT_OK, resultIntent);
-                                                finish();
-                                                return;
-                                            } 
+                                            // 4. 検証結果待ち（mIsVerifyingがReceiverによりリセットされるまで待機）
+                                            // ループ先頭のmIsVerifyingチェックでスキップされる
+                                            
+                                            // 古いフレームをくリアして再処理を防止
+                                            mDetectResultQueue.clear(); 
+                                            mConsecutivePassCount = 0; // 失敗時の次回に備えてリセット
+                                            
+                                            Log.d(DEBUG_TAG, "★ [待機] API応答待ち開始 (mIsVerifying=true)");
                                         } catch (Exception e) {
                                             Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
                                         }
@@ -714,7 +675,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         break;
                                     case 4:
                                         slivenessStat = "LIVENESS_UNPASS";
-                                        if (mConsecutivePassCount > 0) mConsecutivePassCount--; // Decrement instead of reset
+                                        if (mConsecutivePassCount > 0) mConsecutivePassCount--; // デクリメント（リセットではなく減算）
                                         break;
                                     default:
                                         break;
@@ -727,7 +688,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             }
                         }
 
-                        // Only run recognize if liveness passed (anti-spoof + prevent freeze on photo)
+                        // 生体判定がパスした場合のみ認証実行（なりすまし防止・写真攻撃防止）
                         if (livenessOK) {
     						Log.d(DEBUG_TAG, "mDetectResultQueue.recognize");
                         	FacePassRecognitionResult[] recognizeResult = FacePassManager.mFacePassHandler.recognize(FacePassManager.group_name, recognizeData.message, 1, recognizeData.trackOpt[0].trackId, FacePassRecogMode.FP_REG_MODE_FEAT_COMP, -1.0F, -1.0F);
@@ -950,13 +911,6 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     }
 
     @Override
-    protected void onRestart() {
-        faceView.clear();
-        faceView.invalidate();
-        super.onRestart();
-    }
-
-    @Override
     protected void onDestroy() {
         mRecognizeThread.isInterrupt = true;
         mFeedFrameThread.isInterrupt = true;
@@ -970,6 +924,12 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         if (mIRCameraManager != null) {
             mIRCameraManager.release();
         }
+        try {
+            unregisterReceiver(authReceiver);
+        } catch (Exception e) {
+            // Receiver might not be registered
+        }
+
         if (mAndroidHandler != null) {
             mAndroidHandler.removeCallbacksAndMessages(null);
         }

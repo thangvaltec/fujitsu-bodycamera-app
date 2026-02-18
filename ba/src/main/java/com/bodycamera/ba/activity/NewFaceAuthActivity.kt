@@ -44,6 +44,14 @@ class NewFaceAuthActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // BroadcastReceiverをonCreateで登録する（onResumeではない）
+        // FacePassActivityがフォアグラウンドの時、このActivityはpaused状態になるため
+        // onResumeで登録するとreceiverが解除されてBroadcastを受信できなくなる
+        val filter = android.content.IntentFilter()
+        filter.addAction(ACTION_PROCESS_FACE)
+        registerReceiver(faceReceiver, filter)
+        Log.d(TAG, "★ [初期化] BroadcastReceiver登録完了 (ACTION_PROCESS_FACE待機開始)")
+
         if (checkPermission()) {
             startCaptureSafe()
         } else {
@@ -61,7 +69,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
         try {
             captureStrategy.launchCapture(this)
         } catch (e: Exception) {
-            Log.e(TAG, "Error launching capture", e)
+            Log.e(TAG, "キャプチャ起動エラー", e)
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             finish()
         }
@@ -71,7 +79,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
      * FacePassActivityに検証デリゲートを設定します。
      * デリゲートはキャプチャ画像をAPIに送信し、結果に応じてコールバックを呼び出します。
      */
-    // Delegate setup removed (Intent-based architecture)
+    // デリゲート設定削除済み（Broadcastベースのアーキテクチャに移行）
 
     private fun checkPermission(): Boolean {
         return checkSelfPermission(android.Manifest.permission.CAMERA) ==
@@ -100,61 +108,63 @@ class NewFaceAuthActivity : AppCompatActivity() {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.d(TAG, "onActivityResult: req=$requestCode, res=$resultCode, data=${data != null}")
-
-        val handled =
-                captureStrategy.onActivityResult(this, requestCode, resultCode, data) { file, error ->
-                    // ========================================
-                    // Smart Retry対応: api_result_jsonを優先チェック
-                    // ========================================
-                    val apiResultJson = data?.getStringExtra("api_result_json")
-
-                    if (apiResultJson != null) {
-                        // Smart Retryフロー: API検証済みの結果
-                        Log.d(TAG, "★ Smart Retry結果受信: $apiResultJson")
-                        try {
-                            val gson = Gson()
-                            val result = gson.fromJson(apiResultJson, FaceAuthResponse::class.java)
-                            handleAuthResult(result)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "JSON解析エラー (Smart Retry結果)", e)
-                            showErrorAndFinish("結果の解析に失敗しました")
-                        }
-                    } else if (file != null) {
-                        // レガシーフロー: 画像ファイル受信 → ここでAPI呼び出し
-                        Log.d(TAG, "レガシーフロー: 画像ファイル受信")
-                        Toast.makeText(this, "Processing: ${file.absolutePath}", Toast.LENGTH_LONG).show()
+    // ------------------------------------------------------------------------
+    // リファクタリング: Broadcastアーキテクチャ
+    // ------------------------------------------------------------------------
+    
+    private var mPendingAuthResponse: FaceAuthResponse? = null
+    
+    // Broadcastアクション定数
+    private val ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE"
+    private val ACTION_AUTH_RESULT = "com.bodycamera.ba.ACTION_AUTH_RESULT"
+    
+    private val faceReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action == ACTION_PROCESS_FACE) {
+                val imagePath = intent.getStringExtra("image_path")
+                if (imagePath != null) {
+                    Log.d(TAG, "★ [受信] ACTION_PROCESS_FACE: imagePath=$imagePath")
+                    val file = File(imagePath)
+                    if (file.exists()) {
+                        Log.d(TAG, "★ [受信] ファイル確認OK: size=${file.length()/1024}KB, path=${file.absolutePath}")
                         processFaceImage(file)
                     } else {
-                        // キャプチャ失敗
-                        val msg = error ?: "Unknown capture error"
-                        Log.e(TAG, "Capture failed: $msg")
-                        showErrorAndFinish(msg)
+                        Log.e(TAG, "★ [受信] ファイルが存在しません: $imagePath")
+                        broadcastAuthResult(false, "Image file not found")
                     }
                 }
-
-        if (!handled) {
-            super.onActivityResult(requestCode, resultCode, data)
+            }
         }
     }
 
+
+
     /**
-     * レガシーフロー用: 画像ファイルをAPIに送信して結果を処理します。
-     * Smart Retryが有効な場合、この関数は呼ばれません。
+     * FacePassActivityに結果をBroadcast送信するヘルパー
+     */
+    private fun broadcastAuthResult(isSuccess: Boolean, message: String) {
+        val intent = Intent(ACTION_AUTH_RESULT)
+        intent.putExtra("is_success", isSuccess)
+        intent.putExtra("message", message)
+        sendBroadcast(intent)
+        Log.d(TAG, "★ [送信] ACTION_AUTH_RESULT → Maker App: Success=$isSuccess, Msg=$message")
+    }
+
+    /**
+     * 画像ファイルをAPIに送信して結果を処理します。
+     * Broadcast Architecture対応版
      */
     private fun processFaceImage(file: File) {
         Thread {
             try {
                 // 1. 画像の前処理 (リサイズ・回転・圧縮)
+                // ※ FacePassActivity側で1024pxリサイズ済みだが、念のため再チェック
+                Log.d(TAG, "★ [API処理] 開始 - 元ファイル: ${file.absolutePath} (${file.length()/1024}KB)")
                 val compressedFile = compressImageIfNeeded(file)
+                Log.d(TAG, "★ [API処理] 圧縮後ファイル: ${compressedFile.absolutePath} (${compressedFile.length()/1024}KB)")
 
                 mainHandler.post {
-                    Toast.makeText(
-                            this@NewFaceAuthActivity,
-                            "サイズ: ${file.length()} -> ${compressedFile.length()}",
-                            Toast.LENGTH_SHORT
-                    ).show()
+                    // 必要に応じてUI更新（プログレス表示等）
                 }
 
                 // 2. 設定値の取得
@@ -163,48 +173,105 @@ class NewFaceAuthActivity : AppCompatActivity() {
                 val manualDeviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
 
                 if (serverUrl.isEmpty() || manualDeviceId.isEmpty()) {
-                    mainHandler.post { showErrorAndFinish("設定画面でURLとデバイスIDを設定してください") }
+                    val msg = "設定画面でURLとデバイスIDを設定してください"
+                    Log.w(TAG, "★ [API処理] 設定不足: serverUrl=$serverUrl, deviceId=$manualDeviceId")
+                    mainHandler.post { broadcastAuthResult(false, msg) }
                     return@Thread
                 }
 
                 val policeId = "null"
-                Log.d(TAG, "送信先: $serverUrl | デバイスID: $manualDeviceId")
+                Log.d(TAG, "★ [API送信] 送信先URL: $serverUrl")
+                Log.d(TAG, "★ [API送信] デバイスID: $manualDeviceId | policeId: $policeId")
+                Log.d(TAG, "★ [API送信] 送信ファイル: ${compressedFile.name} (${compressedFile.length()/1024}KB)")
 
                 // 3. APIリクエスト送信
+                val startTime = System.currentTimeMillis()
                 val responseJson = FaceRecognitionApi.sendFaceRecognition(
                         compressedFile, manualDeviceId, policeId, serverUrl
                 )
-                Log.d(TAG, "レスポンス: $responseJson")
+                val elapsed = System.currentTimeMillis() - startTime
+                Log.d(TAG, "★ [API応答] 応答時間: ${elapsed}ms")
+                Log.d(TAG, "★ [API応答] レスポンスJSON: $responseJson")
 
                 mainHandler.post {
                     if (responseJson != null) {
                         try {
                             val gson = Gson()
                             val result = gson.fromJson(responseJson, FaceAuthResponse::class.java)
-                            handleAuthResult(result)
+                            
+                            // ステータス判定
+                            // Status 0: 認証成功
+                            // Status 2: 認証成功（情報/警告付き）
+                            // Status 1: 認証失敗
+                            val isSuccess = (result.status == 0 || result.status == 2)
+                            
+                            Log.d(TAG, "★ [API結果] status=${result.status}, name=${result.name}, similarity=${result.similarity}, message=${result.message}")
+                            Log.d(TAG, "★ [API結果] 判定: ${if (isSuccess) "成功" else "失敗"}")
+                            
+                            if (isSuccess) {
+                                // onActivityResult用に結果を保持
+                                mPendingAuthResponse = result
+                                // Maker Appに終了通知
+                                broadcastAuthResult(true, "認証成功")
+                            } else {
+                                // 認証失敗 → Maker App側でリトライ
+                                val msg = result.message ?: "認証失敗 (status=${result.status})"
+                                broadcastAuthResult(false, msg)
+                            }
+                            
                         } catch (e: Exception) {
                             Log.e(TAG, "JSON解析エラー: $responseJson", e)
-                            showErrorAndFinish("サーバーからのレスポンスが無効です")
+                            broadcastAuthResult(false, "サーバー無効応答")
                         }
                     } else {
-                        showErrorAndFinish("サーバーから応答がありません")
+                        broadcastAuthResult(false, "ネットワークエラー")
                     }
 
-                    // 4. 一時ファイルのクリーンアップ
+                    // 4. 一時圧縮ファイルの削除
                     try {
-                        if (file.exists()) file.delete()
                         if (compressedFile.absolutePath != file.absolutePath && compressedFile.exists()) {
                             compressedFile.delete()
                         }
+                        // 元ファイルは削除しない（Maker App側で管理する）
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "ネットワークエラー", e)
-                mainHandler.post { showErrorAndFinish("ネットワークエラー: ${e.message}") }
+                mainHandler.post { broadcastAuthResult(false, "NW Error: ${e.message}") }
             }
         }.start()
+    }
+
+    /**
+     * onActivityResult: Broadcast経由の結果を優先チェック
+     */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        Log.d(TAG, "onActivityResult: req=$requestCode, res=$resultCode")
+        
+        // Broadcast経由の保留結果を優先チェック
+        if (mPendingAuthResponse != null) {
+             Log.d(TAG, "★ Found pending auth response from Broadcast flow")
+             handleAuthResult(mPendingAuthResponse!!)
+             mPendingAuthResponse = null
+             return
+        }
+
+        val handled =
+                captureStrategy.onActivityResult(this, requestCode, resultCode, data) { file, error ->
+                     if (file != null) {
+                         processFaceImage(file)
+                     } else {
+                         val msg = error ?: "Cancelled"
+                         if (error != null) showErrorAndFinish(msg)
+                         else finish()
+                     }
+                }
+
+        if (!handled) {
+            super.onActivityResult(requestCode, resultCode, data)
+        }
     }
 
     /**
@@ -268,7 +335,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
                         bitmap = rotatedBitmap
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Rotation failed", e)
+                    Log.e(TAG, "回転処理に失敗しました", e)
                 }
             }
 
@@ -280,10 +347,10 @@ class NewFaceAuthActivity : AppCompatActivity() {
 
             return newFile
         } catch (e: Exception) {
-            Log.e(TAG, "Compression failed", e)
+            Log.e(TAG, "圧縮処理に失敗しました", e)
             return file
         } catch (e: OutOfMemoryError) {
-            Log.e(TAG, "OOM during compression", e)
+            Log.e(TAG, "圧縮処理中にメモリ不足が発生", e)
             return file
         }
     }
@@ -316,6 +383,12 @@ class NewFaceAuthActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(faceReceiver)
+            Log.d(TAG, "★ [終了] BroadcastReceiver登録解除完了")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         super.onDestroy()
     }
 }
