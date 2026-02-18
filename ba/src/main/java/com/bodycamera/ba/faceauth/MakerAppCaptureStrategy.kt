@@ -4,24 +4,36 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
-import com.bodycamera.ba.facepass.FacePassCameraActivity
 import android.util.Log
 import java.io.File
+import com.bodycamera.ba.activity.SettingsActivity
 
 /**
  * Maker FacePass SDKを使用して顔画像をキャプチャする戦略クラス。
- * FacePassCameraActivityを起動し、結果として返されるファイルパスを取得します。
+ * Smart Retryパターン対応: api_result_json（検証済みJSON）を優先し、
+ * フォールバックとしてimage_path（レガシー）を使用します。
  */
 class MakerAppCaptureStrategy : FaceCaptureStrategy {
 
     companion object {
+        private const val TAG = "MakerCapture"
         private const val REQUEST_MAKER_CAPTURE = 7777
     }
 
     override fun launchCapture(activity: AppCompatActivity) {
-        // Launch external Maker App Activity
+        // 外部Makerアプリ Activity を起動
         val intent = Intent()
         intent.setClassName("mcv.testfacepass", "mcv.testfacepass.FacePassActivity")
+        
+        // Smart Retry用パラメータ設定
+        val prefs = activity.getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+        val serverUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "")
+        val deviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "")
+        
+        intent.putExtra("server_url", serverUrl)
+        intent.putExtra("device_id", deviceId)
+        intent.putExtra("police_id", "null")
+        
         activity.startActivityForResult(intent, REQUEST_MAKER_CAPTURE)
     }
 
@@ -34,7 +46,25 @@ class MakerAppCaptureStrategy : FaceCaptureStrategy {
     ): Boolean {
         if (requestCode == REQUEST_MAKER_CAPTURE) {
             if (resultCode == Activity.RESULT_OK && data != null) {
-                // 1. Try to get image from URI (Modern Android 11+ Secure Way)
+
+                // ========================================
+                // Smart Retryフロー: api_result_json を優先チェック
+                // FacePassActivity内でAPI検証済みの場合、JSONが直接返される
+                // ========================================
+                val apiResultJson = data.getStringExtra("api_result_json")
+                if (apiResultJson != null) {
+                    Log.d(TAG, "★ Smart Retry結果受信 (API検証済み)")
+                    // api_result_jsonが存在する場合、ファイルは不要
+                    // callbackにnullを返すが、呼び出し元でapi_result_jsonを直接読み取る
+                    callback(null, null)
+                    return true
+                }
+
+                // ========================================
+                // レガシーフロー: URI または image_path から画像取得
+                // ========================================
+
+                // 1. URIからコンテンツを取得 (Modern Android 11+ Secure Way)
                 val uri = data.data
                 if (uri != null) {
                     try {
@@ -47,16 +77,16 @@ class MakerAppCaptureStrategy : FaceCaptureStrategy {
                                     input.copyTo(output)
                                 }
                             }
-                            android.util.Log.d("MakerCapture", "Copied URI content to: ${tempFile.absolutePath} (${tempFile.length()} bytes)")
+                            Log.d(TAG, "Copied URI content to: ${tempFile.absolutePath} (${tempFile.length()} bytes)")
                             callback(tempFile, null)
                             return true
                         }
                     } catch (e: Exception) {
-                        android.util.Log.e("MakerCapture", "Failed to resolve URI: $uri", e)
+                        Log.e(TAG, "Failed to resolve URI: $uri", e)
                     }
                 }
 
-                // 2. Fallback to imagePath (Legacy Way)
+                // 2. image_pathからファイル取得 (Legacy Way)
                 val imagePath = data.getStringExtra("image_path")
                 if (!imagePath.isNullOrEmpty()) {
                     val file = File(imagePath)

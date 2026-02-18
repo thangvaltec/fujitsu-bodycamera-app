@@ -40,6 +40,8 @@ import com.android.volley.toolbox.ImageLoader;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import org.json.JSONObject;
+import mcv.testfacepass.utils.FacePassApiHelper;
 
 import mcv.facepass.FacePassException;
 import mcv.facepass.types.FacePassConfig;
@@ -64,6 +66,16 @@ import mcv.testfacepass.utils.FacePassManager;
 
 public class FacePassActivity extends Activity implements CameraManager.CameraListener {
 
+    // ======================================================================
+    // Intent Pass-through Params for Smart Retry
+    // ======================================================================
+    private String mServerUrl;
+    private String mDeviceId;
+    private String mPoliceId;
+
+    // ======================================================================
+    // 既存フィールド
+    // ======================================================================
 
     private static final String DEBUG_TAG = "FacePassDemo";
     private static final String FD_DEBUG_TAG = "FeedFrameDemo";
@@ -146,6 +158,15 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         mDetectResultQueue = new ArrayBlockingQueue<RecognizeData>(5);
         initAndroidHandler();
 
+        // Retrieve params from Intent
+        Intent intent = getIntent();
+        if (intent != null) {
+            mServerUrl = intent.getStringExtra("server_url");
+            mDeviceId = intent.getStringExtra("device_id");
+            mPoliceId = intent.getStringExtra("police_id");
+            Log.d(DEBUG_TAG, "Received Params: URL=" + mServerUrl + ", DeviceID=" + mDeviceId);
+        }
+
         /* 初始化界面 */
         initView();
 
@@ -159,10 +180,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
         // Fix: Lazy Init for direct launch from Ninsho (if MainActivity skipped)
         if (FacePassManager.mFacePassHandler == null) {
-            Log.d(DEBUG_TAG, "SDK not initialized. Initializing now from onCreate...");
+            Log.e(DEBUG_TAG, "!!! SDK not initialized. Initializing now from onCreate... !!!");
             FacePassManager.getInstance().init(this);
         } else {
             Log.d(DEBUG_TAG, "SDK already initialized. Handler: " + FacePassManager.mFacePassHandler);
+            Log.d(DEBUG_TAG, "InitFinished State: " + FacePassManager.getInstance().isInitFinished);
             Log.d(DEBUG_TAG, "Group Status: isLocalGroupExist=" + FacePassManager.isLocalGroupExist);
         }
     }
@@ -275,8 +297,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 }
 
                 if (FacePassManager.mFacePassHandler == null || !FacePassManager.getInstance().isInitFinished) {
-                    if (System.currentTimeMillis() % 1000 < 50) { // Log occasionally to avoid spam
-                        Log.d(DEBUG_TAG, "FeedFrameThread: Waiting for FacePassHandler and full initialization...");
+                    if (System.currentTimeMillis() % 2000 < 50) { // Log occasionally to avoid spam
+                        Log.e(DEBUG_TAG, "FeedFrameThread: Waiting for FacePassHandler and full initialization... isInitFinished=" + FacePassManager.getInstance().isInitFinished);
                     }
                     try {
                         Thread.sleep(100);
@@ -485,9 +507,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             }
 
                                             // 3. 回転処理 (270度)
-                                            int finalRotation = 270; 
+                                            int finalRotation = 270;
                                             // 転送速度とタイムアウト防止のため、品質を80%に調整
-                                            int jpegQuality = 80;
+                                            int jpegQuality = 100; // Maximized to avoid "Low Quality" API error
 
                                             if (finalRotation != 0) {
                                                 android.graphics.Matrix matrix = new android.graphics.Matrix();
@@ -497,6 +519,28 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                                     bitmap.recycle();
                                                     bitmap = rotated;
                                                 }
+                                            }
+
+                                            // 3.5 リサイズ処理 (最大1024px) - サーバー要件に合わせる
+                                            int maxDim = 1024;
+                                            int bw = bitmap.getWidth();
+                                            int bh = bitmap.getHeight();
+                                            if (bw > maxDim || bh > maxDim) {
+                                                float ratio = (float) bw / (float) bh;
+                                                int newW, newH;
+                                                if (ratio > 1) {
+                                                    newW = maxDim;
+                                                    newH = (int) (maxDim / ratio);
+                                                } else {
+                                                    newH = maxDim;
+                                                    newW = (int) (maxDim * ratio);
+                                                }
+                                                android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, newW, newH, true);
+                                                if (scaled != bitmap) {
+                                                    bitmap.recycle();
+                                                    bitmap = scaled;
+                                                }
+                                                Log.d(DEBUG_TAG, "Resized: " + bw + "x" + bh + " → " + newW + "x" + newH);
                                             }
 
                                             // 4. メインアプリとの共有用キャッシュディレクトリに保存
@@ -535,25 +579,126 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                                 }
                                             });
 
-                                            Intent resultIntent = new Intent();
-                                            // Return both path (for legacy) and URI (for modern)
-                                            resultIntent.putExtra("image_path", finalPath); 
-                                            
-                                            try {
-                                                android.net.Uri contentUri = android.support.v4.content.FileProvider.getUriForFile(
-                                                        FacePassActivity.this,
-                                                        "mcv.testfacepass.fileprovider",
-                                                        destFile);
-                                                resultIntent.setData(contentUri);
-                                                resultIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                                                Log.d(DEBUG_TAG, "URI Granted: " + contentUri.toString());
-                                            } catch (Exception e) {
-                                                Log.e(DEBUG_TAG, "FileProvider error", e);
-                                            }
+                                            // ========================================
+                                            // Smart Retry: デリゲート経由でAPI検証
+                                            // ========================================
+                                            // ========================================
+                                            // Smart Retry: 内部でAPI検証 (Intentパラメータ使用)
+                                            // ========================================
+                                            if (mServerUrl != null && !mServerUrl.isEmpty()) {
+                                                Log.d(DEBUG_TAG, "★ API検証開始: " + finalPath);
+                                                
+                                                final java.io.File finalDestFile = destFile;
+                                                final android.graphics.Bitmap finalBitmap = bitmap;
+                                                
+                                                // バックグラウンドスレッドで実行
+                                                Log.d(DEBUG_TAG, "Calling FacePassApiHelper... URL=" + mServerUrl);
+                                                String responseJson = FacePassApiHelper.sendFaceRecognition(finalDestFile, mDeviceId, mPoliceId, mServerUrl);
+                                                Log.d(DEBUG_TAG, "FacePassApiHelper returned: " + (responseJson != null ? "JSON Data" : "NULL"));
+                                                
+                                                boolean apiSuccess = false;
+                                                String errorMessage = "Unknown Error";
 
-                                            setResult(Activity.RESULT_OK, resultIntent);
-                                            finish();
-                                            return; 
+                                                if (responseJson != null) {
+                                                    Log.d(DEBUG_TAG, "★ API Raw Response: " + responseJson);
+                                                    try {
+                                                        JSONObject json = new JSONObject(responseJson);
+                                                        int status = json.optInt("status", -1);
+                                                        String message = json.optString("message", "");
+                                                        Log.d(DEBUG_TAG, "★ API Parsed: status=" + status + ", message=" + message);
+                                                        
+                                                        if (status == 0) {
+                                                            apiSuccess = true;
+                                                        } else {
+                                                            errorMessage = message.isEmpty() ? "認証失敗 (status=" + status + ")" : message;
+                                                        }
+                                                    } catch (Exception e) {
+                                                        Log.e(DEBUG_TAG, "JSON Parse Error", e);
+                                                        errorMessage = "JSON Parse Error";
+                                                    }
+                                                } else {
+                                                    errorMessage = "Network Error or Timeout";
+                                                }
+
+                                                if (apiSuccess) {
+                                                    // ★ API検証成功 (status:0) → 結果を返してActivity終了
+                                                    Log.d(DEBUG_TAG, "★ API検証成功 →認証Appに結果返却");
+                                                    
+                                                    Intent resultIntent = new Intent();
+                                                    resultIntent.putExtra("api_result_json", responseJson);
+                                                    resultIntent.putExtra("image_path", finalPath);
+                                                    
+                                                    try {
+                                                        android.net.Uri contentUri = android.support.v4.content.FileProvider.getUriForFile(
+                                                                FacePassActivity.this,
+                                                                "mcv.testfacepass.fileprovider",
+                                                                finalDestFile);
+                                                        resultIntent.setData(contentUri);
+                                                        resultIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                                    } catch (Exception e) {
+                                                        Log.e(DEBUG_TAG, "FileProvider error", e);
+                                                    }
+                                                    
+                                                    setResult(Activity.RESULT_OK, resultIntent);
+                                                    finish();
+                                                    return;
+                                                } else {
+                                                    // ★ API検証失敗 (status!=0 or network error) → カメラ画面にエラー表示して再試行
+                                                    Log.w(DEBUG_TAG, "★ API検証NG → カメラ画面でエラー表示, 自動リトライ: " + errorMessage);
+                                                    
+                                                    final String finalMessage = errorMessage;
+                                                    runOnUiThread(new Runnable() {
+                                                        @Override
+                                                        public void run() {
+                                                            Toast.makeText(FacePassActivity.this, finalMessage, Toast.LENGTH_LONG).show();
+                                                        }
+                                                    });
+                                                    
+                                                    // パスカウントリセット (再検出を要求)
+                                                    mConsecutivePassCount = 0;
+                                                    
+                                                    // 検出キュークリア (新しいフレームで再開)
+                                                    mDetectResultQueue.clear();
+                                                    
+                                                    // 一時ファイル削除
+                                                    try {
+                                                        if (finalDestFile.exists()) finalDestFile.delete();
+                                                    } catch (Exception e) {
+                                                        Log.e(DEBUG_TAG, "一時ファイル削除エラー", e);
+                                                    }
+                                                    
+                                                    // Bitmapメモリ解放
+                                                    if (finalBitmap != null && !finalBitmap.isRecycled()) {
+                                                        finalBitmap.recycle();
+                                                    }
+                                                    
+                                                    Log.d(DEBUG_TAG, "★ 再試行準備完了 → カメラスキャン継続");
+                                                    // RecognizeThreadのwhileループが自動的に継続
+                                                }
+                                                
+                                            } else {
+                                                // フォールバック: デリゲート未設定時は従来動作
+                                                Log.d(DEBUG_TAG, "デリゲート未設定 → 従来のfinish動作");
+                                                
+                                                Intent resultIntent = new Intent();
+                                                resultIntent.putExtra("image_path", finalPath);
+                                                
+                                                try {
+                                                    android.net.Uri contentUri = android.support.v4.content.FileProvider.getUriForFile(
+                                                            FacePassActivity.this,
+                                                            "mcv.testfacepass.fileprovider",
+                                                            destFile);
+                                                    resultIntent.setData(contentUri);
+                                                    resultIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                                    Log.d(DEBUG_TAG, "URI Granted: " + contentUri.toString());
+                                                } catch (Exception e) {
+                                                    Log.e(DEBUG_TAG, "FileProvider error", e);
+                                                }
+                                                
+                                                setResult(Activity.RESULT_OK, resultIntent);
+                                                finish();
+                                                return;
+                                            } 
                                         } catch (Exception e) {
                                             Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
                                         }
@@ -829,6 +974,13 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mAndroidHandler.removeCallbacksAndMessages(null);
         }
 
+        // Release SDK to prevent nativeHandle is null error on restart
+        if (FacePassManager.mFacePassHandler != null) {
+            FacePassManager.mFacePassHandler.release();
+            FacePassManager.mFacePassHandler = null;
+            Log.d(DEBUG_TAG, "FacePassActivity.onDestroy: Released SDK.");
+        }
+        FacePassManager.getInstance().isInitFinished = false;
 
         super.onDestroy();
     }
@@ -955,6 +1107,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     }
 
     private static final int REQUEST_CODE_CHOOSE_PICK = 1;
+
+
 
 
     private void getFaceImageByFaceToken(final long trackId, final String faceToken) {

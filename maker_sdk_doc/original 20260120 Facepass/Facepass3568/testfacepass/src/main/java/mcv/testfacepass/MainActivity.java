@@ -115,6 +115,8 @@ public class MainActivity extends BaseActivity{
         super.onDestroy();
         if (FacePassManager.mFacePassHandler != null) {
             FacePassManager.mFacePassHandler.release();
+            FacePassManager.mFacePassHandler = null;
         }
+        FacePassManager.getInstance().isInitFinished = false;
     }
 }
