@@ -132,6 +132,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     private Button settingButton;
     /*Toast*/
     private Toast mRecoToast;
+    private Toast mErrorToast; // エラーToast参照 (成功時にキャンセルするため)
 
     /*DetectResult queue*/
     ArrayBlockingQueue<RecognizeData> mDetectResultQueue;
@@ -164,11 +165,22 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 boolean isSuccess = intent.getBooleanExtra("is_success", false);
                 String message = intent.getStringExtra("message");
                 
-                Log.d(DEBUG_TAG, "★ [受信] ACTION_AUTH_RESULT: Success=" + isSuccess + ", Msg=" + message);
+                Log.d(DEBUG_TAG, "★ [受信] ACTION_AUTH_RESULT: Success=" + isSuccess + ", Message=" + message);
+                
+                // 追加: APIからの生JSONログを表示
+                String rawJson = intent.getStringExtra("api_response_json");
+                if (rawJson != null) {
+                    Log.d(DEBUG_TAG, "★ [受信] API Raw Response: " + rawJson);
+                }
                 
                 if (isSuccess) {
                     Log.d(DEBUG_TAG, "★ [受信] 認証成功 → MakerApp終了");
-                    Toast.makeText(FacePassActivity.this, "Authentication Success", Toast.LENGTH_SHORT).show();
+                    // エラーToastが残っている場合はキャンセル
+                    if (mErrorToast != null) {
+                        mErrorToast.cancel();
+                        mErrorToast = null;
+                    }
+                    // Toast.makeText(FacePassActivity.this, "Authentication Success", Toast.LENGTH_SHORT).show();
                     finish(); // Maker App終了、以降はMain Appが処理する
                 } else {
                     // 認証失敗 → リトライ
@@ -178,7 +190,52 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                             Toast.makeText(FacePassActivity.this, finalMsg, Toast.LENGTH_LONG).show();
+                            // カスタムエラーToast (大きい赤文字)
+                            android.widget.LinearLayout layout = new android.widget.LinearLayout(FacePassActivity.this);
+                            layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+                            layout.setPadding(60, 40, 60, 40);
+                            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+                            bg.setColor(android.graphics.Color.argb(200, 30, 30, 30));
+                            bg.setCornerRadius(20);
+                            layout.setBackground(bg);
+
+                            // タイトル「認証失敗」
+                            TextView titleView = new TextView(FacePassActivity.this);
+                            titleView.setText("認証失敗");
+                            titleView.setTextSize(28);
+                            titleView.setTextColor(android.graphics.Color.parseColor("#FF4444"));
+                            titleView.setGravity(android.view.Gravity.CENTER);
+                            titleView.setTypeface(null, android.graphics.Typeface.BOLD);
+                            layout.addView(titleView);
+
+                            // 詳細メッセージ (「認証失敗」重複を除去)
+                            String detailMsg = finalMsg.replace("認証失敗", "").replace("\n", "").trim();
+                            if (!detailMsg.isEmpty()) {
+                                TextView msgView = new TextView(FacePassActivity.this);
+                                msgView.setText(detailMsg);
+                                msgView.setTextSize(24);
+                                msgView.setTextColor(android.graphics.Color.parseColor("#FF4444"));
+                                msgView.setGravity(android.view.Gravity.CENTER);
+                                msgView.setPadding(20, 10, 20, 0);
+                                layout.addView(msgView);
+                            }
+
+                            mErrorToast = new Toast(FacePassActivity.this);
+                            mErrorToast.setGravity(android.view.Gravity.BOTTOM, 0, 150);
+                            mErrorToast.setDuration(Toast.LENGTH_SHORT);
+                            mErrorToast.setView(layout);
+                            mErrorToast.show();
+
+                            // カスタム表示時間 (1500ms = 1.5秒後に自動キャンセル)
+                            mAndroidHandler.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (mErrorToast != null) {
+                                        mErrorToast.cancel();
+                                        mErrorToast = null;
+                                    }
+                                }
+                            }, 1500);
                         }
                     });
                     
@@ -203,7 +260,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mServerUrl = intent.getStringExtra("server_url");
             mDeviceId = intent.getStringExtra("device_id");
             mPoliceId = intent.getStringExtra("police_id");
-            Log.d(DEBUG_TAG, "★ [初期化] パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId);
+            Log.d(DEBUG_TAG, "★  パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId);
         }
 
         /* 初始化界面 */
@@ -212,7 +269,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         android.content.IntentFilter filter = new android.content.IntentFilter();
         filter.addAction(ACTION_AUTH_RESULT);
         registerReceiver(authReceiver, filter);
-        Log.d(DEBUG_TAG, "★ [初期化] BroadcastReceiver登録完了 (ACTION_AUTH_RESULT待機開始)");
+        Log.d(DEBUG_TAG, "★  BroadcastReceiver登録完了 (ACTION_AUTH_RESULT待機開始)");
 
         initView();
 
@@ -621,13 +678,13 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             final int finalW = bitmap.getWidth();
                                             final int finalH = bitmap.getHeight();
 
-                                            Log.d(DEBUG_TAG, "★ [キャプチャ成功] 保存先: " + finalPath + " [" + finalW + "x" + finalH + "] (" + (destFile.length()/1024) + "KB)");;
+                                            Log.d(DEBUG_TAG, "★ キャプチャ成功 保存先: " + finalPath + " [" + finalW + "x" + finalH + "] (" + (destFile.length()/1024) + "KB)");;
 
                                             final long finalFileSize = destFile.length();
                                             mAndroidHandler.post(new Runnable() {
                                                 @Override
                                                 public void run() {
-                                                    Toast.makeText(FacePassActivity.this, "FINALLY: " + finalW + "x" + finalH + " (" + (finalFileSize/1024) + "KB)", Toast.LENGTH_LONG).show();
+                                                    // Toast.makeText(FacePassActivity.this, "FINALLY: " + finalW + "x" + finalH + " (" + (finalFileSize/1024) + "KB)", Toast.LENGTH_LONG).show();
                                                 }
                                             });
 
@@ -639,7 +696,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             mIsVerifying = true;
                                             
                                             // 2. Broadcast送信
-                                            Log.d(DEBUG_TAG, "★ [送信] ACTION_PROCESS_FACE → Main App: " + finalPath);
+                                            Log.d(DEBUG_TAG, "★ 送信ACTION_PROCESS_FACE → Main App: " + finalPath);
                                             android.content.Intent intent = new android.content.Intent(ACTION_PROCESS_FACE);
                                             intent.putExtra("image_path", finalPath);
                                             sendBroadcast(intent);
@@ -648,7 +705,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             mAndroidHandler.post(new Runnable() {
                                                 @Override
                                                 public void run() {
-                                                    Toast.makeText(FacePassActivity.this, "Verifying...", Toast.LENGTH_SHORT).show();
+                                                    // Toast.makeText(FacePassActivity.this, "Verifying...", Toast.LENGTH_SHORT).show();
                                                 }
                                             });
 
@@ -659,7 +716,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             mDetectResultQueue.clear(); 
                                             mConsecutivePassCount = 0; // 失敗時の次回に備えてリセット
                                             
-                                            Log.d(DEBUG_TAG, "★ [待機] API応答待ち開始 (mIsVerifying=true)");
+                                            Log.d(DEBUG_TAG, "★ 待機 API応答待ち開始 (mIsVerifying=true)");
                                         } catch (Exception e) {
                                             Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
                                         }
@@ -890,11 +947,18 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         findViewById(R.id.ivGoBack).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                Log.d(DEBUG_TAG, "★ Back On-screen Back button clicked at " + System.currentTimeMillis());
                 finish();
             }
         });
     }
 
+
+    @Override
+    public void onBackPressed() {
+        Log.d(DEBUG_TAG, "★ Back Hardware Back button pressed at " + System.currentTimeMillis());
+        super.onBackPressed();
+    }
 
     @Override
     protected void onStop() {

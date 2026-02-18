@@ -50,7 +50,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
         val filter = android.content.IntentFilter()
         filter.addAction(ACTION_PROCESS_FACE)
         registerReceiver(faceReceiver, filter)
-        Log.d(TAG, "★ [初期化] BroadcastReceiver登録完了 (ACTION_PROCESS_FACE待機開始)")
+        Log.d(TAG, "★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE待機開始)")
 
         if (checkPermission()) {
             startCaptureSafe()
@@ -142,12 +142,15 @@ class NewFaceAuthActivity : AppCompatActivity() {
     /**
      * FacePassActivityに結果をBroadcast送信するヘルパー
      */
-    private fun broadcastAuthResult(isSuccess: Boolean, message: String) {
+    private fun broadcastAuthResult(isSuccess: Boolean, message: String, json: String? = null) {
         val intent = Intent(ACTION_AUTH_RESULT)
         intent.putExtra("is_success", isSuccess)
         intent.putExtra("message", message)
+        if (json != null) {
+            intent.putExtra("api_response_json", json)
+        }
         sendBroadcast(intent)
-        Log.d(TAG, "★ [送信] ACTION_AUTH_RESULT → Maker App: Success=$isSuccess, Msg=$message")
+        Log.d(TAG, "★ 送信ACTION_AUTH_RESULT → Maker App: Success=$isSuccess, message=$message")
     }
 
     /**
@@ -159,9 +162,9 @@ class NewFaceAuthActivity : AppCompatActivity() {
             try {
                 // 1. 画像の前処理 (リサイズ・回転・圧縮)
                 // ※ FacePassActivity側で1024pxリサイズ済みだが、念のため再チェック
-                Log.d(TAG, "★ [API処理] 開始 - 元ファイル: ${file.absolutePath} (${file.length()/1024}KB)")
+                Log.d(TAG, "★ API処理 開始 - 元ファイル: ${file.absolutePath} (${file.length()/1024}KB)")
                 val compressedFile = compressImageIfNeeded(file)
-                Log.d(TAG, "★ [API処理] 圧縮後ファイル: ${compressedFile.absolutePath} (${compressedFile.length()/1024}KB)")
+                Log.d(TAG, "★ API処理 圧縮後ファイル: ${compressedFile.absolutePath} (${compressedFile.length()/1024}KB)")
 
                 mainHandler.post {
                     // 必要に応じてUI更新（プログレス表示等）
@@ -174,15 +177,15 @@ class NewFaceAuthActivity : AppCompatActivity() {
 
                 if (serverUrl.isEmpty() || manualDeviceId.isEmpty()) {
                     val msg = "設定画面でURLとデバイスIDを設定してください"
-                    Log.w(TAG, "★ [API処理] 設定不足: serverUrl=$serverUrl, deviceId=$manualDeviceId")
+                    Log.w(TAG, "★ API処理 設定不足: serverUrl=$serverUrl, deviceId=$manualDeviceId")
                     mainHandler.post { broadcastAuthResult(false, msg) }
                     return@Thread
                 }
 
                 val policeId = "null"
-                Log.d(TAG, "★ [API送信] 送信先URL: $serverUrl")
-                Log.d(TAG, "★ [API送信] デバイスID: $manualDeviceId | policeId: $policeId")
-                Log.d(TAG, "★ [API送信] 送信ファイル: ${compressedFile.name} (${compressedFile.length()/1024}KB)")
+                Log.d(TAG, "★ API送信 送信先URL: $serverUrl")
+                Log.d(TAG, "★ API送信 デバイスID: $manualDeviceId | policeId: $policeId")
+                Log.d(TAG, "★ API送信 送信ファイル: ${compressedFile.name} (${compressedFile.length()/1024}KB)")
 
                 // 3. APIリクエスト送信
                 val startTime = System.currentTimeMillis()
@@ -190,8 +193,8 @@ class NewFaceAuthActivity : AppCompatActivity() {
                         compressedFile, manualDeviceId, policeId, serverUrl
                 )
                 val elapsed = System.currentTimeMillis() - startTime
-                Log.d(TAG, "★ [API応答] 応答時間: ${elapsed}ms")
-                Log.d(TAG, "★ [API応答] レスポンスJSON: $responseJson")
+                Log.d(TAG, "★ API応答 応答時間: ${elapsed}ms")
+                Log.d(TAG, "★ API応答 レスポンスJSON: $responseJson")
 
                 mainHandler.post {
                     if (responseJson != null) {
@@ -205,18 +208,18 @@ class NewFaceAuthActivity : AppCompatActivity() {
                             // Status 1: 認証失敗
                             val isSuccess = (result.status == 0 || result.status == 2)
                             
-                            Log.d(TAG, "★ [API結果] status=${result.status}, name=${result.name}, similarity=${result.similarity}, message=${result.message}")
-                            Log.d(TAG, "★ [API結果] 判定: ${if (isSuccess) "成功" else "失敗"}")
+                            Log.d(TAG, "★ API結果 status=${result.status}, name=${result.name}, similarity=${result.similarity}, message=${result.message}")
+                            Log.d(TAG, "★ API結果 判定: ${if (isSuccess) "成功" else "失敗"}")
                             
                             if (isSuccess) {
                                 // onActivityResult用に結果を保持
                                 mPendingAuthResponse = result
                                 // Maker Appに終了通知
-                                broadcastAuthResult(true, "認証成功")
+                                broadcastAuthResult(true, "認証成功", responseJson)
                             } else {
                                 // 認証失敗 → Maker App側でリトライ
                                 val msg = result.message ?: "認証失敗 (status=${result.status})"
-                                broadcastAuthResult(false, msg)
+                                broadcastAuthResult(false, msg, responseJson)
                             }
                             
                         } catch (e: Exception) {
@@ -224,6 +227,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
                             broadcastAuthResult(false, "サーバー無効応答")
                         }
                     } else {
+                        Log.e(TAG, "★ API応答 失敗: レスポンスが空(null)です。NW環境 hoặc Server link を確認してください。")
                         broadcastAuthResult(false, "ネットワークエラー")
                     }
 
@@ -238,7 +242,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "ネットワークエラー", e)
+                Log.e(TAG, "★ API通信例外が発生しました: ${e.message}", e)
                 mainHandler.post { broadcastAuthResult(false, "NW Error: ${e.message}") }
             }
         }.start()
@@ -250,12 +254,22 @@ class NewFaceAuthActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         Log.d(TAG, "onActivityResult: req=$requestCode, res=$resultCode")
         
-        // Broadcast経由の保留結果を優先チェック
+        // Broadcast経由の保留結果を優先チェック（API成功時はここで処理される）
+        // ※ MakerAppはfinish()でRESULT_CANCELEDを返すため、この判定を先に行う必要がある
         if (mPendingAuthResponse != null) {
-             Log.d(TAG, "★ Found pending auth response from Broadcast flow")
+             Log.d(TAG, "★ Broadcast経由の認証結果あり → 結果画面へ遷移")
              handleAuthResult(mPendingAuthResponse!!)
              mPendingAuthResponse = null
              return
+        }
+
+        // ユーザーがカメラ画面でバックボタンを押した場合（API結果なし）
+        // → エラー画面ではなく、トップ画面に直接戻る
+        if (resultCode == RESULT_CANCELED) {
+            Log.d(TAG, "★ ユーザーがバックボタンを押しました → トップ画面に戻ります (Time: ${System.currentTimeMillis()})")
+            setResult(RESULT_CANCELED)
+            finish()
+            return
         }
 
         val handled =

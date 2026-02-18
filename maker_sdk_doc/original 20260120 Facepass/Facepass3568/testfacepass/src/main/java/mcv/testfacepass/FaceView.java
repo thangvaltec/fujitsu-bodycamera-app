@@ -112,13 +112,13 @@ public class FaceView extends View {
         for (int i = 0; i < rect.size(); i++) {
             Rect r = rect.get(i);
             canvas.drawRect(r, paint);
-            canvas.drawRect(r.right+5, r.top - 5, r.right + ids.get(i).length() * 25, r.top + 200, backPaint);
+            //canvas.drawRect(r.right+5, r.top - 5, r.right + ids.get(i).length() * 25, r.top + 200, backPaint);
             canvas.drawText(ids.get(i), r.right + 5, r.top + 30, idPaint);
-            canvas.drawText(yaws.get(i), r.right + 5, r.top + 60, posePaint);
-            canvas.drawText(pitchs.get(i), r.right + 5, r.top + 93, posePaint);
-            canvas.drawText(rolls.get(i), r.right + 5, r.top + 126, posePaint);
-            canvas.drawText(blurs.get(i), r.right + 5, r.top + 159, posePaint);
-            canvas.drawText(smiles.get(i), r.right + 5, r.top + 192, posePaint);
+            //canvas.drawText(yaws.get(i), r.right + 5, r.top + 60, posePaint);
+            //canvas.drawText(pitchs.get(i), r.right + 5, r.top + 93, posePaint);
+            //canvas.drawText(rolls.get(i), r.right + 5, r.top + 126, posePaint);
+            //canvas.drawText(blurs.get(i), r.right + 5, r.top + 159, posePaint);
+            //canvas.drawText(smiles.get(i), r.right + 5, r.top + 192, posePaint);
         }
         this.clear();
     }
