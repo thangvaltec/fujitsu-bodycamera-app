@@ -993,13 +993,16 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mAndroidHandler.removeCallbacksAndMessages(null);
         }
 
-        // Release SDK to prevent nativeHandle is null error on restart
-        if (FacePassManager.mFacePassHandler != null) {
-            FacePassManager.mFacePassHandler.release();
-            FacePassManager.mFacePassHandler = null;
-            Log.d(DEBUG_TAG, "FacePassActivity.onDestroy: Released SDK.");
-        }
-        FacePassManager.getInstance().isInitFinished = false;
+        // ★ SDK解放をコメントアウト（パフォーマンス最適化）
+        // 理由: FacePassActivity終了時にSDKを解放すると、次回起動時に再初期化（1-2秒）が必要になる。
+        // SDKをプロセス内に保持することで、2回目以降のカメラ起動が即時になる。
+        // SDKの解放はMainActivity.onDestroy()でのみ行う（アプリ完全終了時）。
+        // if (FacePassManager.mFacePassHandler != null) {
+        //     FacePassManager.mFacePassHandler.release();
+        //     FacePassManager.mFacePassHandler = null;
+        //     Log.d(DEBUG_TAG, "FacePassActivity.onDestroy: Released SDK.");
+        // }
+        // FacePassManager.getInstance().isInitFinished = false;
 
         super.onDestroy();
     }
