@@ -41,7 +41,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import org.json.JSONObject;
-import mcv.testfacepass.utils.FacePassApiHelper;
+
 
 import mcv.facepass.FacePassException;
 import mcv.facepass.types.FacePassConfig;
@@ -66,16 +66,12 @@ import mcv.testfacepass.utils.FacePassManager;
 
 public class FacePassActivity extends Activity implements CameraManager.CameraListener {
 
-    // ======================================================================
     // Intent Pass-through Params for Smart Retry
-    // ======================================================================
     private String mServerUrl;
     private String mDeviceId;
     private String mPoliceId;
 
-    // ======================================================================
     // 既存フィールド
-    // ======================================================================
 
     private static final String DEBUG_TAG = "FacePassDemo";
     private static final String FD_DEBUG_TAG = "FeedFrameDemo";
@@ -147,10 +143,10 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     private DatabaseHelper dbHelper;
 
     /* なりすまし判定の安定化用 */
-    private long mLastPassTrackId = -1;
-    private int mConsecutivePassCount = 0;
-    private static final int REQUIRED_PASS_COUNT = 1; // 1 = immediate capture on first PASS. Relying on IRConfig=0.5 for anti-spoof.
-    private static final float LIVENESS_SCORE_MINIMUM = 95f; // Secondary threshold: even if SDK says PASS, reject if score < this value
+    // private long mLastPassTrackId = -1; // Unused for now
+    // private int mConsecutivePassCount = 0;
+    // private static final int REQUIRED_PASS_COUNT = 1; // 1 = immediate capture on first PASS. Relying on IRConfig=0.5 for anti-spoof.
+    // private static final float LIVENESS_SCORE_MINIMUM = 95f; // Secondary threshold: even if SDK says PASS, reject if score < this value
 
     /* リファクタリング: Broadcastアーキテクチャ追加 */
     private static final String ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE";
@@ -165,16 +161,16 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 boolean isSuccess = intent.getBooleanExtra("is_success", false);
                 String message = intent.getStringExtra("message");
                 
-                Log.d(DEBUG_TAG, "★ [受信] ACTION_AUTH_RESULT: Success=" + isSuccess + ", Message=" + message);
+                Log.d(DEBUG_TAG, "★ 受信 ACTION_AUTH_RESULT: Success=" + isSuccess + ", Message=" + message);
                 
                 // 追加: APIからの生JSONログを表示
                 String rawJson = intent.getStringExtra("api_response_json");
                 if (rawJson != null) {
-                    Log.d(DEBUG_TAG, "★ [受信] API Raw Response: " + rawJson);
+                    Log.d(DEBUG_TAG, "★ 受信 API Raw Response: " + rawJson);
                 }
                 
                 if (isSuccess) {
-                    Log.d(DEBUG_TAG, "★ [受信] 認証成功 → MakerApp終了");
+                    Log.d(DEBUG_TAG, "★受信認証成功 → MakerApp終了");
                     // エラーToastが残っている場合はキャンセル
                     if (mErrorToast != null) {
                         mErrorToast.cancel();
@@ -186,14 +182,14 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     // 認証失敗 → リトライ
                     String displayMsg = message != null ? message : "Verification Failed";
                     final String finalMsg = displayMsg;
-                    Log.d(DEBUG_TAG, "★ [受信] 認証失敗 → リトライ開始: " + finalMsg);
+                    Log.d(DEBUG_TAG, "★受信認証失敗 → リトライ開始: " + finalMsg);
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             // カスタムエラーToast (大きい赤文字)
                             android.widget.LinearLayout layout = new android.widget.LinearLayout(FacePassActivity.this);
                             layout.setOrientation(android.widget.LinearLayout.VERTICAL);
-                            layout.setPadding(60, 40, 60, 40);
+                            layout.setPadding(50, 30, 50, 30);
                             android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
                             bg.setColor(android.graphics.Color.argb(200, 30, 30, 30));
                             bg.setCornerRadius(20);
@@ -213,8 +209,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             if (!detailMsg.isEmpty()) {
                                 TextView msgView = new TextView(FacePassActivity.this);
                                 msgView.setText(detailMsg);
-                                msgView.setTextSize(24);
-                                msgView.setTextColor(android.graphics.Color.parseColor("#FF4444"));
+                                msgView.setTextSize(22);
+                                msgView.setTextColor(android.graphics.Color.parseColor("#FFFFFF"));
                                 msgView.setGravity(android.view.Gravity.CENTER);
                                 msgView.setPadding(20, 10, 20, 0);
                                 layout.addView(msgView);
@@ -241,7 +237,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     
                     // 状態リセット → 再スキャン許可
                     mIsVerifying = false;
-                    mConsecutivePassCount = 0; // 連続PASS回数をリセット
+                    // mConsecutivePassCount = 0; // 連続PASS回数をリセット
                 }
             }
         }
@@ -568,23 +564,24 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         slivenessStat = "LIVENESS_PASS";
                                         
                                         // ★ Score log (printed BEFORE capture so it's always visible)
-                                        Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (minimum: " + LIVENESS_SCORE_MINIMUM + ", threshold: " + result.livenessThreshold + ")");
+                                        Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (threshold: " + result.livenessThreshold + ")");
                                         
                                         // Anti-spoof: スコアが最低基準を満たすかチェック
-                                        if (result.livenessScore < LIVENESS_SCORE_MINIMUM) {
-                                            Log.w(DEBUG_TAG, "★ Score TOO LOW: " + result.livenessScore + " < " + LIVENESS_SCORE_MINIMUM + " → REJECTED (possible photo)");
-                                            break; // Treat as failed - don't increment pass count
-                                        }
+                                        // if (result.livenessScore < LIVENESS_SCORE_MINIMUM) {
+                                        //     Log.w(DEBUG_TAG, "★ Score TOO LOW: " + result.livenessScore + " < " + LIVENESS_SCORE_MINIMUM + " → REJECTED (possible photo)");
+                                        //     break; // Treat as failed - don't increment pass count
+                                        // }
                                         
                                         livenessOK = true;
                                         
                                         // なりすまし安定化: trackIdに依存せず、連続PASS回数のみカウント
-                                        mConsecutivePassCount++;
+                                        // なりすまし安定化: trackIdに依存せず、連続PASS回数のみカウント
+                                        // mConsecutivePassCount++;
                                         
-                                        if (mConsecutivePassCount < REQUIRED_PASS_COUNT) {
-                                            Log.d(DEBUG_TAG, "Liveness: PASS (Count: " + mConsecutivePassCount + "/" + REQUIRED_PASS_COUNT + ") - Waiting for confirmation...");
-                                            break; 
-                                        }
+                                        // if (mConsecutivePassCount < REQUIRED_PASS_COUNT) {
+                                        //     Log.d(DEBUG_TAG, "Liveness: PASS (Count: " + mConsecutivePassCount + "/" + REQUIRED_PASS_COUNT + ") - Waiting for confirmation...");
+                                        //     break; 
+                                        // }
 
                                         Log.d(DEBUG_TAG, "LIVENESS_PASS - 判定確定、画像キャプチャ開始");
                                         try {
@@ -688,9 +685,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                                 }
                                             });
 
-                                            // ========================================
                                             // リファクタリング: Main Appへ画像パスをBroadcast送信
-                                            // ========================================
                                             
                                             // 1. スキャン一時停止
                                             mIsVerifying = true;
@@ -712,9 +707,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             // 4. 検証結果待ち（mIsVerifyingがReceiverによりリセットされるまで待機）
                                             // ループ先頭のmIsVerifyingチェックでスキップされる
                                             
-                                            // 古いフレームをくリアして再処理を防止
+                                            // 古いフレームをクリアして再処理を防止
                                             mDetectResultQueue.clear(); 
-                                            mConsecutivePassCount = 0; // 失敗時の次回に備えてリセット
+                                            // mConsecutivePassCount = 0; // 失敗時の次回に備えてリセット
                                             
                                             Log.d(DEBUG_TAG, "★ 待機 API応答待ち開始 (mIsVerifying=true)");
                                         } catch (Exception e) {
@@ -732,7 +727,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         break;
                                     case 4:
                                         slivenessStat = "LIVENESS_UNPASS";
-                                        if (mConsecutivePassCount > 0) mConsecutivePassCount--; // デクリメント（リセットではなく減算）
+                                        // if (mConsecutivePassCount > 0) mConsecutivePassCount--; // デクリメント（リセットではなく減算）
                                         break;
                                     default:
                                         break;

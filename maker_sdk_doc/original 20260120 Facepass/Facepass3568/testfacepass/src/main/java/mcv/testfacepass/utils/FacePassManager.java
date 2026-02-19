@@ -29,7 +29,7 @@ public class FacePassManager {
 
     /* 人脸识别Group */
     public static String group_name = "facepass";
-    public static float LIVENESS_THRESHOLD = 88f; // 原始值: 单目推荐80, 双目推荐88
+    public static float LIVENESS_THRESHOLD = 95f; // 原始值: 单目推荐80, 双目推荐88
 
     public static Boolean isLocalGroupExist = false;
     private ProgressDialog progressDialog;
@@ -295,7 +295,7 @@ public class FacePassManager {
                         }
                         /*设置双目图片配准参数, 偏移量系数需由客户根据自己的设备测试得到.二眼カメラの画像位置合わせパラメータを設定します。オフセット係数は、お客様が自分のデバイスに基づいてテストして決定する必要があります。
                          */
-                        mFacePassHandler.setIRConfig(1.0, 0.0, 1.0, 0.0, 0.3); // 0.5 for stricter IR anti-spoof (0.3 too weak - photos pass)
+                        mFacePassHandler.setIRConfig(1.0, 0.0, 1.0, 0.0, 0.5); // 0.5 for stricter IR anti-spoof (0.3 too weak - photos pass)
 
                         /* 入库阈值参数 */
                         FacePassConfig addFaceConfig = mFacePassHandler.getAddFaceConfig();
@@ -349,14 +349,7 @@ public class FacePassManager {
                 Log.e(DEBUG_TAG, "Exception while creating local group: " + e.getMessage());
                 e.printStackTrace();
             }
-            // After attempting to create, re-check if it exists or if we should return
-            // If creation failed, we might want to re-evaluate or return false.
-            // For now, let's assume if we tried to create it, we proceed to check.
-            // The original code had a 'return' here, which might be problematic if creation failed.
-            // Let's remove the return here to allow the subsequent check to run.
-            // If the intent was to return immediately if no groups were initially found,
-            // then the logging for existing groups below would not run.
-            // Based on the requested edit, it seems the logging should happen regardless.
+
         }
 
         // Re-fetch groups to ensure the newly created one is included if the above block executed

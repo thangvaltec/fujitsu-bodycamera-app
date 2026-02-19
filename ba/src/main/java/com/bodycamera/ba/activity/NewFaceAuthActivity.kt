@@ -123,13 +123,13 @@ class NewFaceAuthActivity : AppCompatActivity() {
             if (intent?.action == ACTION_PROCESS_FACE) {
                 val imagePath = intent.getStringExtra("image_path")
                 if (imagePath != null) {
-                    Log.d(TAG, "★ [受信] ACTION_PROCESS_FACE: imagePath=$imagePath")
+                    Log.d(TAG, "★受信ACTION_PROCESS_FACE: imagePath=$imagePath")
                     val file = File(imagePath)
                     if (file.exists()) {
-                        Log.d(TAG, "★ [受信] ファイル確認OK: size=${file.length()/1024}KB, path=${file.absolutePath}")
+                        Log.d(TAG, "★受信ファイル確認OK: size=${file.length()/1024}KB, path=${file.absolutePath}")
                         processFaceImage(file)
                     } else {
-                        Log.e(TAG, "★ [受信] ファイルが存在しません: $imagePath")
+                        Log.e(TAG, "★受信ファイルが存在しません: $imagePath")
                         broadcastAuthResult(false, "Image file not found")
                     }
                 }
@@ -231,16 +231,25 @@ class NewFaceAuthActivity : AppCompatActivity() {
                         broadcastAuthResult(false, "ネットワークエラー")
                     }
 
+                    }
+
                     // 4. 一時圧縮ファイルの削除
                     try {
+                        // 圧縮ファイルがあれば削除
                         if (compressedFile.absolutePath != file.absolutePath && compressedFile.exists()) {
                             compressedFile.delete()
                         }
-                        // 元ファイルは削除しない（Maker App側で管理する）
+                        
+                        // ★ Logic xóa ảnh gốc sau khi dùng xong (Hiên tại Disable để Debug)
+                        // Original file deleted to save storage (Commented out for debugging)
+                        // if (file.exists()) {
+                        //      val deleted = file.delete()
+                        //      if (deleted) Log.d(TAG, "★ Clean up: Deleted original face image: ${file.name}")
+                        //      else Log.w(TAG, "★ Clean up: Failed to delete original face image: ${file.name}")
+                        // }
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
-                }
             } catch (e: Exception) {
                 Log.e(TAG, "★ API通信例外が発生しました: ${e.message}", e)
                 mainHandler.post { broadcastAuthResult(false, "NW Error: ${e.message}") }
