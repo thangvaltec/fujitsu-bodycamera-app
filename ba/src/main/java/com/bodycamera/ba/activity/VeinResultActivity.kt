@@ -23,7 +23,9 @@ class VeinResultActivity : AppCompatActivity() {
         const val EXTRA_NEW_MESSAGE = "extra_new_message"
         const val EXTRA_NEW_SIMILARITY = "extra_new_similarity"
         const val EXTRA_NEW_NAME = "extra_new_name"
+        const val EXTRA_NEW_NAME = "extra_new_name"
         const val EXTRA_NEW_ID = "extra_new_id"
+        const val EXTRA_CANDIDATE_LIST = "candidate_list"
     }
 
     // UI
@@ -205,10 +207,14 @@ class VeinResultActivity : AppCompatActivity() {
                 tvIdLine.text = "ID: $realId"
                 tvIdLine.visibility = View.VISIBLE
             }
-        } else {
-            tvNameLabel.visibility = View.GONE
-            tvName.visibility = View.GONE
             tvIdLine.visibility = View.GONE
+        }
+        
+        // Debug: Show candidates if present
+        val candidates = intent.getStringArrayListExtra(EXTRA_CANDIDATE_LIST)
+        if (candidates != null && candidates.isNotEmpty()) {
+             tvMessage.text = "${tvMessage.text}\n[Debug] Candidates: ${candidates.joinToString(",")}"
+             tvMessage.visibility = View.VISIBLE
         }
 
         // 5. ボタン（新しいフローでは現在は終了ボタンのみ）

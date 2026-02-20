@@ -235,7 +235,13 @@ class TopActivity : AppCompatActivity() {
             val status = intent?.getIntExtra("ResultStatus", 2) ?: 2
             val message = intent?.getStringExtra("ResultMessage") ?: ""
             val similarity = intent?.getStringExtra("ResultSimilarity")
-            Log.d(TAG, "Result received via Intent: Name=$resultName, ID=$resultID")
+            val candidateList = intent?.getStringArrayListExtra("candidate_list")
+            
+            Log.d(TAG, "Result received via Intent: Name=$resultName, ID=$resultID, Candidates=${candidateList?.size}")
+            
+            // If we have a candidate list, we might want to trigger Vein Auth immediately if in Face+Vein mode
+            // usage: if (candidateList != null) ...
+            
             forwardFaceResultToVeinResultWithDetails(status, message, resultName, resultID, similarity)
         }
     }
@@ -319,7 +325,8 @@ class TopActivity : AppCompatActivity() {
         faceId: String?,
         autoStart: Boolean,
         returnResult: Boolean,
-        fromExternal: Boolean
+        fromExternal: Boolean,
+        candidateList: ArrayList<String>? = null
     ) {
         val intent =
             Intent().apply {
@@ -332,6 +339,10 @@ class TopActivity : AppCompatActivity() {
                 putExtra("auto_start", autoStart)
                 putExtra("return_result", returnResult)
                 putExtra("from_external", fromExternal)
+                if (candidateList != null && candidateList.isNotEmpty()) {
+                    putStringArrayListExtra("candidate_list", candidateList)
+                    Log.d(TAG, "Launching PalmSecure with ${candidateList.size} candidates")
+                }
             }
 
         try {
@@ -342,7 +353,7 @@ class TopActivity : AppCompatActivity() {
     }
 
     // 全画面メッセージ + 自動でPalmSecure起動（TopActivity非表示）
-    private fun showFullScreenMessageAndLaunchPalmSecure(message: String, faceId: String?) {
+    private fun showFullScreenMessageAndLaunchPalmSecure(message: String, faceId: String?, candidateList: ArrayList<String>? = null) {
         val dialog = AlertDialog.Builder(this).setCancelable(false).create()
 
         val view = layoutInflater.inflate(android.R.layout.simple_list_item_1, null)
@@ -374,7 +385,8 @@ class TopActivity : AppCompatActivity() {
                         faceId = faceId,
                         autoStart = true,
                         returnResult = true,
-                        fromExternal = true
+                        fromExternal = true,
+                        candidateList = candidateList
                     )
                 },
                 3500
@@ -502,7 +514,20 @@ class TopActivity : AppCompatActivity() {
                 if (mode == "FaceAndVein") {
                     if (status == 2) {
                         // Flow3: 顔認証成功 → メッセージ表示 → 静脈認証へ
-                        showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId)
+                        if (currentAuthMode() == "FaceAndVein") {
+                             val candidateList = data.getStringArrayListExtra("candidate_list")
+                             if (candidateList != null && candidateList.isNotEmpty()) {
+                                 // TopK Candidates case: Direct launch without delay? Or minimal delay?
+                                 // User wants TopK -> Vein Flow.
+                                 // Let's show a quick toast/dialog and then launch Vein with candidates.
+                                 showFullScreenMessageAndLaunchPalmSecure("顔認証完了 (TopK)\n手をかざしてください", null, candidateList)
+                             } else {
+                                 // Legacy/Single Match case
+                                 showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId, null)
+                             }
+                        } else {
+                             showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId, null)
+                        }
                     } else {
                         // Flow3: 顔認証失敗 → 直接結果画面へ（再試行ボタン付き）
                         val intent = Intent(this, VeinResultActivity::class.java).apply {

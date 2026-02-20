@@ -169,6 +169,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     Log.d(DEBUG_TAG, "★ 受信 API Raw Response: " + rawJson);
                 }
                 
+                // Allow restart scan if failed
+                if (!isSuccess) {
+                     mIsVerifying = false;
+                }
+                
                 if (isSuccess) {
                     Log.d(DEBUG_TAG, "★受信認証成功 → MakerApp終了");
                     // エラーToastが残っている場合はキャンセル
@@ -743,26 +748,88 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                         // 生体判定がパスした場合のみ認証実行（なりすまし防止・写真攻撃防止）
                         if (livenessOK) {
     						Log.d(DEBUG_TAG, "mDetectResultQueue.recognize");
-                        	FacePassRecognitionResult[] recognizeResult = FacePassManager.mFacePassHandler.recognize(FacePassManager.group_name, recognizeData.message, 1, recognizeData.trackOpt[0].trackId, FacePassRecogMode.FP_REG_MODE_FEAT_COMP, -1.0F, -1.0F);
+                            // ★ TopK Implementation (K=5)
+                            int topK = 5;
+                            Log.d(DEBUG_TAG, "Running recognize with TopK=" + topK);
+                            
+                            // Call recognize with TopK API
+                            FacePassRecognitionResult[][] recognizeResult = FacePassManager.mFacePassHandler.recognize(
+                                    FacePassManager.group_name, 
+                                    recognizeData.message, 
+                                    topK, 
+                                    recognizeData.trackOpt, 
+                                    null, // extraMessage
+                                    -1, -1 // default search/liveness thresholds
+                            );
 
-                        	if (recognizeResult != null && recognizeResult.length > 0) {
-                        	Log.d(DEBUG_TAG, "FacePassRecognitionResult length = " + recognizeResult.length);
-                            for (FacePassRecognitionResult result : recognizeResult) {
-                            	if (null == result.faceToken) {
-                            		Log.d(DEBUG_TAG, "result.faceToken is null.");
-                                	continue;
-                            	}
-                                String faceToken = new String(result.faceToken);
-                                Log.d(DEBUG_TAG, "FacePassRecognitionState.RECOGNITION_PASS = " + result.recognitionState);
-                                if (FacePassRecognitionState.RECOGNITION_PASS == result.recognitionState) {
-                                	getFaceImageByFaceToken(result.trackId, faceToken);
+                            if (recognizeResult != null && recognizeResult.length > 0) {
+                                Log.d(DEBUG_TAG, "TopK recognizeResult length = " + recognizeResult.length);
+                                
+                                // We only care about the first face detected (assuming single person usage)
+                                // If multiple faces, we pick the first one's candidates
+                                FacePassRecognitionResult[] candidates = recognizeResult[0]; // Candidates for the first face
+                                
+                                if (candidates != null && candidates.length > 0) {
+                                    java.util.ArrayList<String> candidateList = new java.util.ArrayList<>();
+                                    
+                                    for (FacePassRecognitionResult candidate : candidates) {
+                                        if (candidate.faceToken == null) continue;
+                                        
+                                        // Filter by search score threshold (e.g. 60.0)
+                                        // Note: If score is -100.0, it means it's filler or below threshold
+                                        if (candidate.detail.searchScore < 60.0f) {
+                                            Log.d(DEBUG_TAG, "Skipping candidate due to low score: " + candidate.detail.searchScore);
+                                            continue;
+                                        }
+
+                                        String faceToken = new String(candidate.faceToken);
+                                        Log.d(DEBUG_TAG, "TopK Candidate: " + faceToken + ", Score: " + candidate.detail.searchScore);
+                                        candidateList.add(faceToken);
+                                        
+                                        // Optional: Show name on UI for debugging (shows only first valid one)
+                                        if (FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
+                                            getFaceImageByFaceToken(candidate.trackId, faceToken);
+                                        }
+                                        showRecognizeResult(candidate.trackId, candidate.detail.searchScore, candidate.detail.livenessScore, !TextUtils.isEmpty(faceToken));
+                                    }
+
+                                    if (!candidateList.isEmpty()) {
+                                        Log.d(DEBUG_TAG, "★ Found " + candidateList.size() + " valid candidates. Broadcasting...");
+                                        
+                                        // Prepare Broadcast
+                                        android.content.Intent intent = new android.content.Intent(ACTION_PROCESS_FACE); // Reusing ACTION_PROCESS_FACE
+                                        intent.putStringArrayListExtra("candidate_list", candidateList);
+                                        
+                                        // We might also want to send the image path if Vein needs it for reference, 
+                                        // but for now, just the list is the key new part.
+                                        // (Capture logic was earlier in Liveness check - we might need to unify)
+                                        // *Correction*: Liveness check block handles capture. But here we are in recognize block.
+                                        // Let's attach the candidates to the PREVIOUSLY captured image intent? onReceive?
+                                        // Actually, `ACTION_PROCESS_FACE` was sent in Liveness block. 
+                                        // We should send a NEW action or update the flow.
+                                        
+                                        // **Architecture Update**: 
+                                        // 1. Liveness Pass -> Capture -> Broadcast "ACTION_LIVENESS_PASS" (or reuse ACTION_PROCESS_FACE)
+                                        // 2. Recognize (Parallel) -> Broadcast "ACTION_RECOGNIZE_RESULT" with candidates.
+                                        //
+                                        // However, existing `NewFaceAuthActivity` expects `ACTION_PROCESS_FACE`.
+                                        // Let's send a specific ACTION for Recognition Result.
+                                        
+                                        // For simplicity and minimal changes:
+                                        // Reuse ACTION_AUTH_RESULT (usually for Final Result) or create a new one.
+                                        // Let's create ACTION_RECOGNIZE_RESULT.
+                                        
+                                        android.content.Intent candidatesIntent = new android.content.Intent("com.bodycamera.ba.ACTION_CANDIDATE_LIST");
+                                        candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
+                                        sendBroadcast(candidatesIntent);
+                                        
+                                        // Pause scanning
+                                        mIsVerifying = true;
+                                    } else {
+                                        Log.d(DEBUG_TAG, "TopK: No valid candidates found above threshold.");
+                                    }
                                 }
-                                showRecognizeResult(result.trackId, result.detail.searchScore, result.detail.livenessScore, !TextUtils.isEmpty(faceToken));
                             }
-                            }
-                        } else {
-                            Log.d(DEBUG_TAG, "Liveness FAILED - skipping recognize to prevent freeze. Continuing...");
-                        }
 
 
 

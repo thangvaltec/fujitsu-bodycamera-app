@@ -49,8 +49,9 @@ class NewFaceAuthActivity : AppCompatActivity() {
         // onResumeで登録するとreceiverが解除されてBroadcastを受信できなくなる
         val filter = android.content.IntentFilter()
         filter.addAction(ACTION_PROCESS_FACE)
+        filter.addAction(ACTION_CANDIDATE_LIST)
         registerReceiver(faceReceiver, filter)
-        Log.d(TAG, "★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE待機開始)")
+        Log.d(TAG, "★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE & ACTION_CANDIDATE_LIST 待機開始)")
 
         if (checkPermission()) {
             startCaptureSafe()
@@ -116,7 +117,9 @@ class NewFaceAuthActivity : AppCompatActivity() {
     
     // Broadcastアクション定数
     private val ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE"
+    private val ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE"
     private val ACTION_AUTH_RESULT = "com.bodycamera.ba.ACTION_AUTH_RESULT"
+    private val ACTION_CANDIDATE_LIST = "com.bodycamera.ba.ACTION_CANDIDATE_LIST"
     
     private val faceReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: Intent?) {
@@ -134,7 +137,27 @@ class NewFaceAuthActivity : AppCompatActivity() {
                     }
                 }
             }
+            } else if (intent?.action == ACTION_CANDIDATE_LIST) {
+                val candidates = intent.getStringArrayListExtra("candidate_list")
+                if (candidates != null && candidates.isNotEmpty()) {
+                    Log.d(TAG, "★受信ACTION_CANDIDATE_LIST: count=${candidates.size}")
+                    handleCandidateList(candidates)
+                }
+            }
         }
+    }
+
+    /**
+     * TopK候補リストを受け取った場合の処理
+     */
+    private fun handleCandidateList(candidates: ArrayList<String>) {
+        val data = Intent().apply {
+            putStringArrayListExtra("candidate_list", candidates)
+            putExtra("ResultStatus", 2)
+            putExtra("ResultMessage", "TopK Candidates Found")
+        }
+        setResult(RESULT_OK, data)
+        finish()
     }
 
 
