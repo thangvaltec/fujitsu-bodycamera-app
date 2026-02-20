@@ -10,8 +10,9 @@ interface FaceCaptureStrategy {
     /**
      * Launch the capture process.
      * @param activity The host activity.
+     * @param options Optional parameters for the capture strategy.
      */
-    fun launchCapture(activity: AppCompatActivity)
+    fun launchCapture(activity: AppCompatActivity, options: android.os.Bundle? = null)
 
     /**
      * Handle the result from onActivityResult.

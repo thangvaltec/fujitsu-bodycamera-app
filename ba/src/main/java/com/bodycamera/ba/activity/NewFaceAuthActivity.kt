@@ -68,7 +68,12 @@ class NewFaceAuthActivity : AppCompatActivity() {
     private fun startCaptureSafe() {
         Log.d(TAG, "キャプチャ戦略を開始します")
         try {
-            captureStrategy.launchCapture(this)
+            // Retrieve TopK option from Intent
+            val useTopK = intent.getBooleanExtra("should_use_topk", false)
+            val options = android.os.Bundle()
+            options.putBoolean("should_use_topk", useTopK)
+            
+            captureStrategy.launchCapture(this, options)
         } catch (e: Exception) {
             Log.e(TAG, "キャプチャ起動エラー", e)
             Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
@@ -117,7 +122,6 @@ class NewFaceAuthActivity : AppCompatActivity() {
     
     // Broadcastアクション定数
     private val ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE"
-    private val ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE"
     private val ACTION_AUTH_RESULT = "com.bodycamera.ba.ACTION_AUTH_RESULT"
     private val ACTION_CANDIDATE_LIST = "com.bodycamera.ba.ACTION_CANDIDATE_LIST"
     
@@ -136,7 +140,6 @@ class NewFaceAuthActivity : AppCompatActivity() {
                         broadcastAuthResult(false, "Image file not found")
                     }
                 }
-            }
             } else if (intent?.action == ACTION_CANDIDATE_LIST) {
                 val candidates = intent.getStringArrayListExtra("candidate_list")
                 if (candidates != null && candidates.isNotEmpty()) {

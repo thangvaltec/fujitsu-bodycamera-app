@@ -16,54 +16,51 @@ import com.bodycamera.tests.R
  */
 class SettingsActivity : AppCompatActivity() {
 
+    // Layout and Preference keys
     private lateinit var etServerUrl: EditText
     private lateinit var etDeviceId: EditText
+    private lateinit var cbUseTopK: android.widget.CheckBox // Added
     private lateinit var btnSave: Button
     private lateinit var prefs: SharedPreferences
 
     companion object {
-        // 設定保存用プリファレンス名
         const val PREFS_NAME = "BodyCameraPrefs"
-
-        // 設定キー
         const val KEY_SERVER_URL = "server_url"
         const val KEY_DEVICE_ID = "device_id"
+        const val KEY_USE_TOPK = "use_topk" // Added
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        // SharedPreferencesの初期化
         prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        // UIコンポーネントの初期化
         etServerUrl = findViewById(R.id.etServerUrl)
         etDeviceId = findViewById(R.id.etDeviceId)
+        cbUseTopK = findViewById(R.id.cbUseTopK) // Added
         btnSave = findViewById(R.id.btnSave)
 
-        // 保存された設定を読み込んで表示
         loadSettings()
 
-        // 保存ボタンのリスナー設定
         btnSave.setOnClickListener { saveSettings() }
     }
 
-    /** 保存されている設定を画面に反映します。 未設定の場合は空文字を表示します（Hintが有効になります）。 */
     private fun loadSettings() {
         val url = prefs.getString(KEY_SERVER_URL, "")
         val deviceId = prefs.getString(KEY_DEVICE_ID, "")
+        val useTopK = prefs.getBoolean(KEY_USE_TOPK, false) // Default false
 
         etServerUrl.setText(url)
         etDeviceId.setText(deviceId)
+        cbUseTopK.isChecked = useTopK // Added
     }
 
-    /** 入力内容を検証し、SharedPreferencesに保存します。 */
     private fun saveSettings() {
         val url = etServerUrl.text.toString().trim()
         val deviceId = etDeviceId.text.toString().trim()
+        val useTopK = cbUseTopK.isChecked // Added
 
-        // バリデーションチェック
         if (url.isEmpty()) {
             etServerUrl.error = "サーバーURLを入力してください"
             return
@@ -74,10 +71,10 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
 
-        // 設定の保存
         prefs.edit().apply {
             putString(KEY_SERVER_URL, url)
             putString(KEY_DEVICE_ID, deviceId)
+            putBoolean(KEY_USE_TOPK, useTopK) // Added
             apply()
         }
 

@@ -25,7 +25,7 @@ class CameraCaptureStrategy : FaceCaptureStrategy {
 
     private var currentPhotoUri: Uri? = null
 
-    override fun launchCapture(activity: AppCompatActivity) {
+    override fun launchCapture(activity: AppCompatActivity, options: android.os.Bundle?) {
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
         if (intent.resolveActivity(activity.packageManager) != null) {
             val photoUri = createImageUri(activity)

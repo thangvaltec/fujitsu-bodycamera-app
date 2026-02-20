@@ -55,13 +55,23 @@
             android:id="@+id/etDeviceId"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="24dp"
             android:background="#1F2937"
             android:hint="2222222"
             android:inputType="text"
             android:padding="12dp"
             android:textColor="#FFFFFF"
             android:textColorHint="#4B5563" />
+
+        <!-- TopK Setting -->
+        <CheckBox
+            android:id="@+id/cbUseTopK"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="32dp"
+            android:text="Flow3 (Face+Vein) uses TopK"
+            android:textColor="#FFFFFF"
+            android:buttonTint="#0EA5E9" />
 
         <!-- Save Button -->
         <Button

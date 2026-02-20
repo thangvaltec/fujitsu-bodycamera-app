@@ -23,7 +23,6 @@ class VeinResultActivity : AppCompatActivity() {
         const val EXTRA_NEW_MESSAGE = "extra_new_message"
         const val EXTRA_NEW_SIMILARITY = "extra_new_similarity"
         const val EXTRA_NEW_NAME = "extra_new_name"
-        const val EXTRA_NEW_NAME = "extra_new_name"
         const val EXTRA_NEW_ID = "extra_new_id"
         const val EXTRA_CANDIDATE_LIST = "candidate_list"
     }

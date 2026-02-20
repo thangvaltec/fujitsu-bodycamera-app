@@ -249,6 +249,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     };
 
 
+    private boolean mUseTopKMode = false; // Flag to enable TopK flow
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -261,7 +263,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mServerUrl = intent.getStringExtra("server_url");
             mDeviceId = intent.getStringExtra("device_id");
             mPoliceId = intent.getStringExtra("police_id");
-            Log.d(DEBUG_TAG, "★  パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId);
+            mUseTopKMode = intent.getBooleanExtra("should_use_topk", false);
+            Log.d(DEBUG_TAG, "★  パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode);
         }
 
         /* 初始化界面 */
@@ -588,138 +591,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         //     break; 
                                         // }
 
-                                        Log.d(DEBUG_TAG, "LIVENESS_PASS - 判定確定、画像キャプチャ開始");
-                                        try {
-                                            byte[] finalImageData = recognizeData.nv21Data;
-                                            int finalWidth = recognizeData.width;
-                                            int finalHeight = recognizeData.height;
-
-                                            if (finalImageData == null || finalImageData.length < (finalWidth * finalHeight)) {
-                                                Log.e(DEBUG_TAG, "Capture Error: データバッファが無効または空です");
-                                                break;
-                                            }
-
-                                            // 1. YuvImageを使用してNV21からJPEGに変換
-                                            android.graphics.YuvImage yuvImage = new android.graphics.YuvImage(
-                                                    finalImageData,
-                                                    android.graphics.ImageFormat.NV21,
-                                                    finalWidth,
-                                                    finalHeight,
-                                                    null);
-                                            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-                                            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 100, out);
-                                            byte[] jpegBytes = out.toByteArray();
-
-                                            // 2. 回転処理のためにBitmapにデコード
-                                            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
-                                            if (bitmap == null) {
-                                                Log.e(DEBUG_TAG, "Critical: JPEG Decode failed in memory!");
-                                                break;
-                                            }
-
-                                            // 3. 回転処理 (270度)
-                                            int finalRotation = 270;
-                                            // 転送速度とタイムアウト防止のため、品質を80%に調整
-                                            int jpegQuality = 100; // Maximized to avoid "Low Quality" API error
-
-                                            if (finalRotation != 0) {
-                                                android.graphics.Matrix matrix = new android.graphics.Matrix();
-                                                matrix.postRotate(finalRotation);
-                                                android.graphics.Bitmap rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
-                                                if (rotated != bitmap) {
-                                                    bitmap.recycle();
-                                                    bitmap = rotated;
-                                                }
-                                            }
-
-                                            // 3.5 リサイズ処理 (最大1024px) - サーバー要件に合わせる
-                                            int maxDim = 1024;
-                                            int bw = bitmap.getWidth();
-                                            int bh = bitmap.getHeight();
-                                            if (bw > maxDim || bh > maxDim) {
-                                                float ratio = (float) bw / (float) bh;
-                                                int newW, newH;
-                                                if (ratio > 1) {
-                                                    newW = maxDim;
-                                                    newH = (int) (maxDim / ratio);
-                                                } else {
-                                                    newH = maxDim;
-                                                    newW = (int) (maxDim * ratio);
-                                                }
-                                                android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, newW, newH, true);
-                                                if (scaled != bitmap) {
-                                                    bitmap.recycle();
-                                                    bitmap = scaled;
-                                                }
-                                                Log.d(DEBUG_TAG, "Resized: " + bw + "x" + bh + " → " + newW + "x" + newH);
-                                            }
-
-                                            // 4. 共有ディレクトリに保存 (Scoped Storage対策: 両アプリがアクセス可能な場所)
-                                            String fileName = "face_" + System.currentTimeMillis() + ".jpg";
-                                            java.io.File sharedDir = new java.io.File(
-                                                android.os.Environment.getExternalStorageDirectory(), "FaceAuth");
-                                            if (!sharedDir.exists()) {
-                                                sharedDir.mkdirs();
-                                            }
-                                            
-                                            java.io.File destFile = new java.io.File(sharedDir, fileName);
-                                            
-                                            java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
-                                            boolean compressOk = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, jpegQuality, fos);
-                                            fos.flush();
-                                            fos.getFD().sync(); // 物理書き込みを確実に行う
-                                            fos.close();
-
-                                            if (!compressOk || destFile.length() == 0) {
-                                                Log.e(DEBUG_TAG, "Failed to compress bitmap to file!");
-                                                break;
-                                            }
-
-                                            // 5. FileProviderを介してコンテンツURIを返す (Android 11+ 対策)
-                                            final String finalPath = destFile.getAbsolutePath();
-                                            final int finalW = bitmap.getWidth();
-                                            final int finalH = bitmap.getHeight();
-
-                                            Log.d(DEBUG_TAG, "★ キャプチャ成功 保存先: " + finalPath + " [" + finalW + "x" + finalH + "] (" + (destFile.length()/1024) + "KB)");;
-
-                                            final long finalFileSize = destFile.length();
-                                            mAndroidHandler.post(new Runnable() {
-                                                @Override
-                                                public void run() {
-                                                    // Toast.makeText(FacePassActivity.this, "FINALLY: " + finalW + "x" + finalH + " (" + (finalFileSize/1024) + "KB)", Toast.LENGTH_LONG).show();
-                                                }
-                                            });
-
-                                            // リファクタリング: Main Appへ画像パスをBroadcast送信
-                                            
-                                            // 1. スキャン一時停止
-                                            mIsVerifying = true;
-                                            
-                                            // 2. Broadcast送信
-                                            Log.d(DEBUG_TAG, "★ 送信ACTION_PROCESS_FACE → Main App: " + finalPath);
-                                            android.content.Intent intent = new android.content.Intent(ACTION_PROCESS_FACE);
-                                            intent.putExtra("image_path", finalPath);
-                                            sendBroadcast(intent);
-                                            
-                                            // 3. UIフィードバック表示
-                                            mAndroidHandler.post(new Runnable() {
-                                                @Override
-                                                public void run() {
-                                                    // Toast.makeText(FacePassActivity.this, "Verifying...", Toast.LENGTH_SHORT).show();
-                                                }
-                                            });
-
-                                            // 4. 検証結果待ち（mIsVerifyingがReceiverによりリセットされるまで待機）
-                                            // ループ先頭のmIsVerifyingチェックでスキップされる
-                                            
-                                            // 古いフレームをクリアして再処理を防止
-                                            mDetectResultQueue.clear(); 
-                                            // mConsecutivePassCount = 0; // 失敗時の次回に備えてリセット
-                                            
-                                            Log.d(DEBUG_TAG, "★ 待機 API応答待ち開始 (mIsVerifying=true)");
-                                        } catch (Exception e) {
-                                            Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
-                                        }
+                                        // Capture logic moved to executeFaceCapture()
+                                        // Mode switching below will handle TopK or Legacy capture
                                         break;
                                     case 1:
                                         slivenessStat = "LIVENESS_RETRY";
@@ -748,88 +621,78 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                         // 生体判定がパスした場合のみ認証実行（なりすまし防止・写真攻撃防止）
                         if (livenessOK) {
                             Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
-                            Log.d(DEBUG_TAG, "★ [TopK] Liveness PASSED → Recognize開始");
-                            Log.d(DEBUG_TAG, "  TrackID: " + recognizeData.trackOpt[0].trackId);
-                            Log.d(DEBUG_TAG, "  SearchThreshold(setting): " + recognizeData.trackOpt[0].searchThreshold);
-                            Log.d(DEBUG_TAG, "  LivenessThreshold(setting): " + recognizeData.trackOpt[0].livenessThreshold);
-                            // ★ TopK Implementation (K=5)
-                            int topK = 5;
-                            float scoreFilter = 60.0f;
-                            Log.d(DEBUG_TAG, "  TopK=" + topK + ", ScoreFilter>=" + scoreFilter);
-                            Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
-                            
-                            // Call recognize with TopK API
-                            FacePassRecognitionResult[][] recognizeResult = FacePassManager.mFacePassHandler.recognize(
-                                    FacePassManager.group_name, 
-                                    recognizeData.message, 
-                                    topK, 
-                                    recognizeData.trackOpt, 
-                                    null, // extraMessage
-                                    -1, -1 // default search/liveness thresholds
-                            );
+                            Log.d(DEBUG_TAG, "★ [TopK] Liveness PASSED → Recognize...");
 
-                            if (recognizeResult != null && recognizeResult.length > 0) {
-                                Log.d(DEBUG_TAG, "★ [TopK] SDK返却: " + recognizeResult.length + " faces detected");
+                            // ============================================================
+                            // Mode Switching Logic
+                            // ============================================================
+                            
+                            if (mUseTopKMode) {
+                                // ------------------------------------------------------------
+                                // MODE: TopK (Flow 3 with "Use TopK" enabled)
+                                // ------------------------------------------------------------
+                                Log.d(DEBUG_TAG, "★ [TopK Mode] Starting Local Recognition...");
                                 
-                                // We only care about the first face detected (assuming single person usage)
-                                // If multiple faces, we pick the first one's candidates
-                                FacePassRecognitionResult[] candidates = recognizeResult[0]; // Candidates for the first face
+                                int topK = 5;
+                                float scoreFilter = 60.0f;
+                                Log.d(DEBUG_TAG, "  TopK=" + topK + ", ScoreFilter>=" + scoreFilter);
+                                
+                                // Call recognize using standard overload (1D return array) but with TopK=5
+                                FacePassRecognitionResult[] candidates = FacePassManager.mFacePassHandler.recognize(
+                                        FacePassManager.group_name,
+                                        recognizeData.message,
+                                        topK,
+                                        recognizeData.trackOpt[0].trackId,
+                                        FacePassRecogMode.FP_REG_MODE_FEAT_COMP,
+                                        -1.0F, -1.0F
+                                );
+
+                                java.util.ArrayList<String> candidateList = new java.util.ArrayList<>();
                                 
                                 if (candidates != null && candidates.length > 0) {
-                                    Log.d(DEBUG_TAG, "★ [TopK] 第1顔のCandidate数(SDK返却): " + candidates.length + " 人");
-                                    java.util.ArrayList<String> candidateList = new java.util.ArrayList<>();
+                                    Log.d(DEBUG_TAG, "★ [TopK] SDK Return: " + candidates.length + " candidates");
                                     int idx = 0;
-                                    
+
                                     for (FacePassRecognitionResult candidate : candidates) {
                                         idx++;
-                                        if (candidate.faceToken == null) {
-                                            Log.d(DEBUG_TAG, "  [" + idx + "/" + candidates.length + "] faceToken=null → SKIP");
-                                            continue;
-                                        }
-                                        
+                                        if (candidate.faceToken == null) continue;
+
                                         String faceToken = new String(candidate.faceToken);
-                                        String stateStr = (candidate.recognitionState == 0) ? "PASS" : "FAIL(" + candidate.recognitionState + ")";
-                                        Log.d(DEBUG_TAG, "  [" + idx + "/" + candidates.length + "] Token=" + faceToken 
-                                            + ", SearchScore=" + candidate.detail.searchScore 
-                                            + ", LivenessScore=" + candidate.detail.livenessScore
-                                            + ", State=" + stateStr);
+                                        // Log candidate details...
+                                        // Log.d(DEBUG_TAG, "  [" + idx + "] Token=" + faceToken + ", Score=" + candidate.detail.searchScore);
                                         
-                                        // Filter by search score threshold
-                                        if (candidate.detail.searchScore < scoreFilter) {
-                                            Log.d(DEBUG_TAG, "    → REJECTED (score " + candidate.detail.searchScore + " < " + scoreFilter + ")");
-                                            continue;
+                                        if (candidate.detail.searchScore >= scoreFilter) {
+                                            candidateList.add(faceToken);
+                                            // Debug display
+                                            if (FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
+                                                getFaceImageByFaceToken(candidate.trackId, faceToken);
+                                            }
+                                            showRecognizeResult(candidate.trackId, candidate.detail.searchScore, candidate.detail.livenessScore, !TextUtils.isEmpty(faceToken));
                                         }
-                                        Log.d(DEBUG_TAG, "    → ACCEPTED");
-
-                                        candidateList.add(faceToken);
-                                        
-                                        // Optional: Show name on UI for debugging (shows only first valid one)
-                                        if (FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
-                                            getFaceImageByFaceToken(candidate.trackId, faceToken);
-                                        }
-                                        showRecognizeResult(candidate.trackId, candidate.detail.searchScore, candidate.detail.livenessScore, !TextUtils.isEmpty(faceToken));
-                                    }
-
-                                    Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
-                                    Log.d(DEBUG_TAG, "★ [TopK] SUMMARY: SDK返却=" + candidates.length + "人, 有効(score>=" + scoreFilter + ")=" + candidateList.size() + "人");
-                                    for (int ci = 0; ci < candidateList.size(); ci++) {
-                                        Log.d(DEBUG_TAG, "  ValidCandidate[" + ci + "]: " + candidateList.get(ci));
-                                    }
-                                    Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
-                                    
-                                    if (!candidateList.isEmpty()) {
-                                        Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST (" + candidateList.size() + "人)");
-                                        
-                                        android.content.Intent candidatesIntent = new android.content.Intent("com.bodycamera.ba.ACTION_CANDIDATE_LIST");
-                                        candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
-                                        sendBroadcast(candidatesIntent);
-                                        
-                                        // Pause scanning
-                                        mIsVerifying = true;
-                                    } else {
-                                        Log.d(DEBUG_TAG, "★ [TopK] No valid candidates → スキャン続行");
                                     }
                                 }
+
+                                if (!candidateList.isEmpty()) {
+                                    Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST (" + candidateList.size() + " candidates)");
+                                    
+                                    android.content.Intent candidatesIntent = new android.content.Intent("com.bodycamera.ba.ACTION_CANDIDATE_LIST");
+                                    candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
+                                    sendBroadcast(candidatesIntent);
+                                    
+                                    mIsVerifying = true;
+                                    mDetectResultQueue.clear(); 
+                                    continue; // Skip capture
+                                } else {
+                                    Log.d(DEBUG_TAG, "★ [TopK] No valid candidates → Fallback to Capture");
+                                    executeFaceCapture(recognizeData);
+                                }
+
+                            } else {
+                                // ------------------------------------------------------------
+                                // MODE: Legacy (Flow 1 or Flow 3 with "Use TopK" disabled)
+                                // ------------------------------------------------------------
+                                Log.d(DEBUG_TAG, "★ [Legacy Mode] Skipping TopK. Executing Capture directly.");
+                                executeFaceCapture(recognizeData);
                             }
 
 
@@ -855,6 +718,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 //                            }
 //                        }
                     }
+                    } // end if (mFacePassHandler != null && isLocalGroupExist)
                 } catch (InterruptedException e) {
                     Log.e(DEBUG_TAG, "RecognizeThread Interrupted", e);
                 } catch (FacePassException e) {
@@ -1255,4 +1119,139 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         }
     }
 
+
+    // Added for modular capture logic
+    private void executeFaceCapture(RecognizeData recognizeData) {
+        Log.d(DEBUG_TAG, "★ executing Legacy Face Capture...");
+        try {
+            byte[] finalImageData = recognizeData.nv21Data;
+            int finalWidth = recognizeData.width;
+            int finalHeight = recognizeData.height;
+
+            if (finalImageData == null || finalImageData.length < (finalWidth * finalHeight)) {
+                Log.e(DEBUG_TAG, "Capture Error: データバッファが無効または空です");
+                return;
+            }
+
+            // 1. YuvImageを使用してNV21からJPEGに変換
+            android.graphics.YuvImage yuvImage = new android.graphics.YuvImage(
+                    finalImageData,
+                    android.graphics.ImageFormat.NV21,
+                    finalWidth,
+                    finalHeight,
+                    null);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 100, out);
+            byte[] jpegBytes = out.toByteArray();
+
+            // 2. 回転処理のためにBitmapにデコード
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
+            if (bitmap == null) {
+                Log.e(DEBUG_TAG, "Critical: JPEG Decode failed in memory!");
+                return;
+            }
+
+            // 3. 回転処理 (270度)
+            int finalRotation = 270;
+            // 転送速度とタイムアウト防止のため、品質を80%に調整
+            int jpegQuality = 100; // Maximized to avoid "Low Quality" API error
+
+            if (finalRotation != 0) {
+                android.graphics.Matrix matrix = new android.graphics.Matrix();
+                matrix.postRotate(finalRotation);
+                android.graphics.Bitmap rotated = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+                if (rotated != bitmap) {
+                    bitmap.recycle();
+                    bitmap = rotated;
+                }
+            }
+
+            // 3.5 リサイズ処理 (最大1024px) - サーバー要件に合わせる
+            int maxDim = 1024;
+            int bw = bitmap.getWidth();
+            int bh = bitmap.getHeight();
+            if (bw > maxDim || bh > maxDim) {
+                float ratio = (float) bw / (float) bh;
+                int newW, newH;
+                if (ratio > 1) {
+                    newW = maxDim;
+                    newH = (int) (maxDim / ratio);
+                } else {
+                    newH = maxDim;
+                    newW = (int) (maxDim * ratio);
+                }
+                android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(bitmap, newW, newH, true);
+                if (scaled != bitmap) {
+                    bitmap.recycle();
+                    bitmap = scaled;
+                }
+                Log.d(DEBUG_TAG, "Resized: " + bw + "x" + bh + " → " + newW + "x" + newH);
+            }
+
+            // 4. 共有ディレクトリに保存 (Scoped Storage対策: 両アプリがアクセス可能な場所)
+            String fileName = "face_" + System.currentTimeMillis() + ".jpg";
+            java.io.File sharedDir = new java.io.File(
+                android.os.Environment.getExternalStorageDirectory(), "FaceAuth");
+            if (!sharedDir.exists()) {
+                sharedDir.mkdirs();
+            }
+            
+            java.io.File destFile = new java.io.File(sharedDir, fileName);
+            
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
+            boolean compressOk = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, jpegQuality, fos);
+            fos.flush();
+            fos.getFD().sync(); // 物理書き込みを確実に行う
+            fos.close();
+
+            if (!compressOk || destFile.length() == 0) {
+                Log.e(DEBUG_TAG, "Failed to compress bitmap to file!");
+                return;
+            }
+
+            // 5. FileProviderを介してコンテンツURIを返す (Android 11+ 対策)
+            final String finalPath = destFile.getAbsolutePath();
+            final int finalW = bitmap.getWidth();
+            final int finalH = bitmap.getHeight();
+
+            Log.d(DEBUG_TAG, "★ キャプチャ成功 保存先: " + finalPath + " [" + finalW + "x" + finalH + "] (" + (destFile.length()/1024) + "KB)");;
+
+            final long finalFileSize = destFile.length();
+            mAndroidHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    // Toast.makeText(FacePassActivity.this, "FINALLY: " + finalW + "x" + finalH + " (" + (finalFileSize/1024) + "KB)", Toast.LENGTH_LONG).show();
+                }
+            });
+
+            // リファクタリング: Main Appへ画像パスをBroadcast送信
+            
+            // 1. スキャン一時停止
+            mIsVerifying = true;
+            
+            // 2. Broadcast送信
+            Log.d(DEBUG_TAG, "★ 送信ACTION_PROCESS_FACE → Main App: " + finalPath);
+            android.content.Intent intent = new android.content.Intent(ACTION_PROCESS_FACE);
+            intent.putExtra("image_path", finalPath);
+            sendBroadcast(intent);
+            
+            // 3. UIフィードバック表示
+            mAndroidHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    // Toast.makeText(FacePassActivity.this, "Verifying...", Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            // 4. 検証結果待ち（mIsVerifyingがReceiverによりリセットされるまで待機）
+            // ループ先頭のmIsVerifyingチェックでスキップされる
+            
+            // 古いフレームをクリアして再処理を防止
+            mDetectResultQueue.clear(); 
+            
+            Log.d(DEBUG_TAG, "★ 待機 API応答待ち開始 (mIsVerifying=true)");
+        } catch (Exception e) {
+            Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
+        }
+    }
 }

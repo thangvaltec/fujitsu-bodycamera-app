@@ -4,6 +4,7 @@
 
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
@@ -300,6 +301,17 @@ class TopActivity : AppCompatActivity() {
     private fun launchFaceRecognition() {
         Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
+        
+        // Determine if we should use TopK flow
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+        val useTopKSetting = prefs.getBoolean(SettingsActivity.KEY_USE_TOPK, false)
+        val isFlow3 = currentAuthMode() == "FaceAndVein"
+        
+        val shouldUseTopK = isFlow3 && useTopKSetting
+        Log.d(TAG, "Launch Policy: Flow3=$isFlow3, Setting=$useTopKSetting → UseTopK=$shouldUseTopK")
+        
+        intent.putExtra("should_use_topk", shouldUseTopK)
+        
         // Flow3のチェーン（顔→静脈）を実現するため、結果を待ちます
         startActivityForResult(intent, REQUEST_FACE)
     }

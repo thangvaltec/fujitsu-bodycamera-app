@@ -20,7 +20,7 @@ class MakerAppCaptureStrategy : FaceCaptureStrategy {
         private const val REQUEST_MAKER_CAPTURE = 7777
     }
 
-    override fun launchCapture(activity: AppCompatActivity) {
+    override fun launchCapture(activity: AppCompatActivity, options: android.os.Bundle?) {
         // 外部Makerアプリ Activity を起動
         val intent = Intent()
         intent.setClassName("mcv.testfacepass", "mcv.testfacepass.FacePassActivity")
@@ -33,6 +33,12 @@ class MakerAppCaptureStrategy : FaceCaptureStrategy {
         intent.putExtra("server_url", serverUrl)
         intent.putExtra("device_id", deviceId)
         intent.putExtra("police_id", "null")
+        
+        // Pass use_topk flag if present
+        if (options != null && options.containsKey("should_use_topk")) {
+            val useTopK = options.getBoolean("should_use_topk")
+            intent.putExtra("should_use_topk", useTopK)
+        }
         
         activity.startActivityForResult(intent, REQUEST_MAKER_CAPTURE)
     }
