@@ -747,10 +747,16 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
                         // 生体判定がパスした場合のみ認証実行（なりすまし防止・写真攻撃防止）
                         if (livenessOK) {
-    						Log.d(DEBUG_TAG, "mDetectResultQueue.recognize");
+                            Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
+                            Log.d(DEBUG_TAG, "★ [TopK] Liveness PASSED → Recognize開始");
+                            Log.d(DEBUG_TAG, "  TrackID: " + recognizeData.trackOpt[0].trackId);
+                            Log.d(DEBUG_TAG, "  SearchThreshold(setting): " + recognizeData.trackOpt[0].searchThreshold);
+                            Log.d(DEBUG_TAG, "  LivenessThreshold(setting): " + recognizeData.trackOpt[0].livenessThreshold);
                             // ★ TopK Implementation (K=5)
                             int topK = 5;
-                            Log.d(DEBUG_TAG, "Running recognize with TopK=" + topK);
+                            float scoreFilter = 60.0f;
+                            Log.d(DEBUG_TAG, "  TopK=" + topK + ", ScoreFilter>=" + scoreFilter);
+                            Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                             
                             // Call recognize with TopK API
                             FacePassRecognitionResult[][] recognizeResult = FacePassManager.mFacePassHandler.recognize(
@@ -763,27 +769,38 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             );
 
                             if (recognizeResult != null && recognizeResult.length > 0) {
-                                Log.d(DEBUG_TAG, "TopK recognizeResult length = " + recognizeResult.length);
+                                Log.d(DEBUG_TAG, "★ [TopK] SDK返却: " + recognizeResult.length + " faces detected");
                                 
                                 // We only care about the first face detected (assuming single person usage)
                                 // If multiple faces, we pick the first one's candidates
                                 FacePassRecognitionResult[] candidates = recognizeResult[0]; // Candidates for the first face
                                 
                                 if (candidates != null && candidates.length > 0) {
+                                    Log.d(DEBUG_TAG, "★ [TopK] 第1顔のCandidate数(SDK返却): " + candidates.length + " 人");
                                     java.util.ArrayList<String> candidateList = new java.util.ArrayList<>();
+                                    int idx = 0;
                                     
                                     for (FacePassRecognitionResult candidate : candidates) {
-                                        if (candidate.faceToken == null) continue;
-                                        
-                                        // Filter by search score threshold (e.g. 60.0)
-                                        // Note: If score is -100.0, it means it's filler or below threshold
-                                        if (candidate.detail.searchScore < 60.0f) {
-                                            Log.d(DEBUG_TAG, "Skipping candidate due to low score: " + candidate.detail.searchScore);
+                                        idx++;
+                                        if (candidate.faceToken == null) {
+                                            Log.d(DEBUG_TAG, "  [" + idx + "/" + candidates.length + "] faceToken=null → SKIP");
                                             continue;
                                         }
-
+                                        
                                         String faceToken = new String(candidate.faceToken);
-                                        Log.d(DEBUG_TAG, "TopK Candidate: " + faceToken + ", Score: " + candidate.detail.searchScore);
+                                        String stateStr = (candidate.recognitionState == 0) ? "PASS" : "FAIL(" + candidate.recognitionState + ")";
+                                        Log.d(DEBUG_TAG, "  [" + idx + "/" + candidates.length + "] Token=" + faceToken 
+                                            + ", SearchScore=" + candidate.detail.searchScore 
+                                            + ", LivenessScore=" + candidate.detail.livenessScore
+                                            + ", State=" + stateStr);
+                                        
+                                        // Filter by search score threshold
+                                        if (candidate.detail.searchScore < scoreFilter) {
+                                            Log.d(DEBUG_TAG, "    → REJECTED (score " + candidate.detail.searchScore + " < " + scoreFilter + ")");
+                                            continue;
+                                        }
+                                        Log.d(DEBUG_TAG, "    → ACCEPTED");
+
                                         candidateList.add(faceToken);
                                         
                                         // Optional: Show name on UI for debugging (shows only first valid one)
@@ -793,31 +810,15 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         showRecognizeResult(candidate.trackId, candidate.detail.searchScore, candidate.detail.livenessScore, !TextUtils.isEmpty(faceToken));
                                     }
 
+                                    Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
+                                    Log.d(DEBUG_TAG, "★ [TopK] SUMMARY: SDK返却=" + candidates.length + "人, 有効(score>=" + scoreFilter + ")=" + candidateList.size() + "人");
+                                    for (int ci = 0; ci < candidateList.size(); ci++) {
+                                        Log.d(DEBUG_TAG, "  ValidCandidate[" + ci + "]: " + candidateList.get(ci));
+                                    }
+                                    Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
+                                    
                                     if (!candidateList.isEmpty()) {
-                                        Log.d(DEBUG_TAG, "★ Found " + candidateList.size() + " valid candidates. Broadcasting...");
-                                        
-                                        // Prepare Broadcast
-                                        android.content.Intent intent = new android.content.Intent(ACTION_PROCESS_FACE); // Reusing ACTION_PROCESS_FACE
-                                        intent.putStringArrayListExtra("candidate_list", candidateList);
-                                        
-                                        // We might also want to send the image path if Vein needs it for reference, 
-                                        // but for now, just the list is the key new part.
-                                        // (Capture logic was earlier in Liveness check - we might need to unify)
-                                        // *Correction*: Liveness check block handles capture. But here we are in recognize block.
-                                        // Let's attach the candidates to the PREVIOUSLY captured image intent? onReceive?
-                                        // Actually, `ACTION_PROCESS_FACE` was sent in Liveness block. 
-                                        // We should send a NEW action or update the flow.
-                                        
-                                        // **Architecture Update**: 
-                                        // 1. Liveness Pass -> Capture -> Broadcast "ACTION_LIVENESS_PASS" (or reuse ACTION_PROCESS_FACE)
-                                        // 2. Recognize (Parallel) -> Broadcast "ACTION_RECOGNIZE_RESULT" with candidates.
-                                        //
-                                        // However, existing `NewFaceAuthActivity` expects `ACTION_PROCESS_FACE`.
-                                        // Let's send a specific ACTION for Recognition Result.
-                                        
-                                        // For simplicity and minimal changes:
-                                        // Reuse ACTION_AUTH_RESULT (usually for Final Result) or create a new one.
-                                        // Let's create ACTION_RECOGNIZE_RESULT.
+                                        Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST (" + candidateList.size() + "人)");
                                         
                                         android.content.Intent candidatesIntent = new android.content.Intent("com.bodycamera.ba.ACTION_CANDIDATE_LIST");
                                         candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
@@ -826,7 +827,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         // Pause scanning
                                         mIsVerifying = true;
                                     } else {
-                                        Log.d(DEBUG_TAG, "TopK: No valid candidates found above threshold.");
+                                        Log.d(DEBUG_TAG, "★ [TopK] No valid candidates → スキャン続行");
                                     }
                                 }
                             }

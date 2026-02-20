@@ -286,6 +286,9 @@ class TopActivity : AppCompatActivity() {
 
         // フロー3: 顔＋静脈認証
         btnFaceAndVein.setOnClickListener {
+            Log.d(TAG, "═══════════════════════════════════════════")
+            Log.d(TAG, "★ [Flow3] START: 顔＋静脈認証 開始")
+            Log.d(TAG, "═══════════════════════════════════════════")
             saveAuthMode("FaceAndVein")
             saveFaceResultPending(false)
             launchFaceRecognition()
@@ -514,19 +517,22 @@ class TopActivity : AppCompatActivity() {
                 if (mode == "FaceAndVein") {
                     if (status == 2) {
                         // Flow3: 顔認証成功 → メッセージ表示 → 静脈認証へ
-                        if (currentAuthMode() == "FaceAndVein") {
-                             val candidateList = data.getStringArrayListExtra("candidate_list")
-                             if (candidateList != null && candidateList.isNotEmpty()) {
-                                 // TopK Candidates case: Direct launch without delay? Or minimal delay?
-                                 // User wants TopK -> Vein Flow.
-                                 // Let's show a quick toast/dialog and then launch Vein with candidates.
-                                 showFullScreenMessageAndLaunchPalmSecure("顔認証完了 (TopK)\n手をかざしてください", null, candidateList)
-                             } else {
-                                 // Legacy/Single Match case
-                                 showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId, null)
-                             }
+                        val candidateList = data.getStringArrayListExtra("candidate_list")
+                        Log.d(TAG, "═══════════════════════════════════════════")
+                        Log.d(TAG, "★ [Flow3] 顔認証結果受信")
+                        Log.d(TAG, "  Status=$status, Name=$resultName, ID=$resultId")
+                        Log.d(TAG, "  Similarity=$similarity")
+                        Log.d(TAG, "  CandidateList: ${candidateList?.size ?: 0} 人")
+                        candidateList?.forEachIndexed { i, id ->
+                            Log.d(TAG, "    Candidate[$i]: $id")
+                        }
+                        Log.d(TAG, "═══════════════════════════════════════════")
+                        if (candidateList != null && candidateList.isNotEmpty()) {
+                            Log.d(TAG, "★ [Flow3] TopK → PalmSecure起動 (${candidateList.size}人)")
+                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了 (TopK)\n手をかざしてください", null, candidateList)
                         } else {
-                             showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId, null)
+                            Log.d(TAG, "★ [Flow3] Legacy → PalmSecure起動 (faceId=$resultId)")
+                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId, null)
                         }
                     } else {
                         // Flow3: 顔認証失敗 → 直接結果画面へ（再試行ボタン付き）
