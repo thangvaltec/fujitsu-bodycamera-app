@@ -637,54 +637,89 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                 float scoreFilter = 60.0f;
                                 Log.d(DEBUG_TAG, "  TopK=" + topK + ", ScoreFilter>=" + scoreFilter);
                                 
-                                // Call recognize using standard overload (1D return array) but with TopK=5
+                                // Maker準拠: trackOptから閾値を取得（マスク検知対応）
+                                // Call recognize with TopK, using Maker's original thresholds from trackOpt
                                 FacePassRecognitionResult[] candidates = FacePassManager.mFacePassHandler.recognize(
                                         FacePassManager.group_name,
                                         recognizeData.message,
                                         topK,
                                         recognizeData.trackOpt[0].trackId,
-                                        FacePassRecogMode.FP_REG_MODE_FEAT_COMP,
-                                        -1.0F, -1.0F
+                                        FacePassRecogMode.FP_REG_MODE_DEFAULT,
+                                        recognizeData.trackOpt[0].livenessThreshold,
+                                        recognizeData.trackOpt[0].searchThreshold
                                 );
 
                                 java.util.ArrayList<String> candidateList = new java.util.ArrayList<>();
                                 
                                 if (candidates != null && candidates.length > 0) {
                                     Log.d(DEBUG_TAG, "★ [TopK] SDK Return: " + candidates.length + " candidates");
+                                    Log.d(DEBUG_TAG, "────────────────────────────────────────");
                                     int idx = 0;
 
                                     for (FacePassRecognitionResult candidate : candidates) {
                                         idx++;
-                                        if (candidate.faceToken == null) continue;
+                                        if (candidate.faceToken == null) {
+                                            Log.d(DEBUG_TAG, "  [" + idx + "] Token=NULL (skipped)");
+                                            continue;
+                                        }
 
                                         String faceToken = new String(candidate.faceToken);
-                                        // Log candidate details...
-                                        // Log.d(DEBUG_TAG, "  [" + idx + "] Token=" + faceToken + ", Score=" + candidate.detail.searchScore);
+                                        float searchScore = candidate.detail.searchScore;
+                                        float livenessScore = candidate.detail.livenessScore;
+                                        String state = (candidate.recognitionState == 0) ? "PASS" : "FAIL(" + candidate.recognitionState + ")";
                                         
-                                        if (candidate.detail.searchScore >= scoreFilter) {
-                                            candidateList.add(faceToken);
+                                        Log.d(DEBUG_TAG, "  [" + idx + "] Token=" + faceToken 
+                                            + ", SearchScore=" + searchScore 
+                                            + ", LivenessScore=" + livenessScore 
+                                            + ", State=" + state
+                                            + (searchScore >= scoreFilter ? " ✓ ACCEPTED" : " ✗ REJECTED (< " + scoreFilter + ")"));
+                                        
+                                        if (searchScore >= scoreFilter) {
+                                            // faceToken → userId変換（PalmSecureはuserIdを使用するため）
+                                            String userId = dbHelper.findName(faceToken);
+                                            String candidateId = (userId != null && !userId.isEmpty()) ? userId : faceToken;
+                                            Log.d(DEBUG_TAG, "    → Token→UserId: " + faceToken + " → " + candidateId);
+                                            candidateList.add(candidateId);
                                             // Debug display
                                             if (FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
                                                 getFaceImageByFaceToken(candidate.trackId, faceToken);
                                             }
-                                            showRecognizeResult(candidate.trackId, candidate.detail.searchScore, candidate.detail.livenessScore, !TextUtils.isEmpty(faceToken));
+                                            showRecognizeResult(candidate.trackId, searchScore, livenessScore, !TextUtils.isEmpty(faceToken));
                                         }
                                     }
+                                    Log.d(DEBUG_TAG, "────────────────────────────────────────");
+                                    Log.d(DEBUG_TAG, "★ [TopK] Summary: " + candidateList.size() + "/" + candidates.length + " passed filter (score >= " + scoreFilter + ")");
                                 }
 
                                 if (!candidateList.isEmpty()) {
-                                    Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST (" + candidateList.size() + " candidates)");
+                                    Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
+                                    Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST");
+                                    Log.d(DEBUG_TAG, "  Candidate count: " + candidateList.size());
+                                    for (int ci = 0; ci < candidateList.size(); ci++) {
+                                        Log.d(DEBUG_TAG, "  → Send[" + ci + "]: " + candidateList.get(ci));
+                                    }
+                                    Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                                     
                                     android.content.Intent candidatesIntent = new android.content.Intent("com.bodycamera.ba.ACTION_CANDIDATE_LIST");
                                     candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
                                     sendBroadcast(candidatesIntent);
                                     
+                                    Log.d(DEBUG_TAG, "★ [TopK] Broadcast sent → Finishing FacePassActivity...");
                                     mIsVerifying = true;
-                                    mDetectResultQueue.clear(); 
-                                    continue; // Skip capture
+                                    mDetectResultQueue.clear();
+                                    
+                                    // Auto-close camera so NewFaceAuthActivity can return to TopActivity
+                                    mAndroidHandler.post(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            Log.d(DEBUG_TAG, "★ [TopK] Calling finish() to close camera");
+                                            finish();
+                                        }
+                                    });
+                                    return; // Exit RecognizeThread
                                 } else {
-                                    Log.d(DEBUG_TAG, "★ [TopK] No valid candidates → Fallback to Capture");
-                                    executeFaceCapture(recognizeData);
+                                    Log.d(DEBUG_TAG, "★ [TopK] No valid candidates → Continue scanning (noAPI branch)");
+                                    // No API fallback - keep scanning for a better face
                                 }
 
                             } else {

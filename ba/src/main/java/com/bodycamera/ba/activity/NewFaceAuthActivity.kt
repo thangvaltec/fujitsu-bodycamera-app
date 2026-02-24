@@ -154,6 +154,14 @@ class NewFaceAuthActivity : AppCompatActivity() {
      * TopK候補リストを受け取った場合の処理
      */
     private fun handleCandidateList(candidates: ArrayList<String>) {
+        Log.d(TAG, "═══════════════════════════════════════════")
+        Log.d(TAG, "★ handleCandidateList: ${candidates.size} candidates received")
+        candidates.forEachIndexed { i, token ->
+            Log.d(TAG, "  → Received[$i]: $token")
+        }
+        Log.d(TAG, "★ Setting RESULT_OK with candidate_list → Finishing NewFaceAuthActivity...")
+        Log.d(TAG, "═══════════════════════════════════════════")
+        
         val data = Intent().apply {
             putStringArrayListExtra("candidate_list", candidates)
             putExtra("ResultStatus", 2)

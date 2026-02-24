@@ -302,13 +302,10 @@ class TopActivity : AppCompatActivity() {
         Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
         
-        // Determine if we should use TopK flow
-        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
-        val useTopKSetting = prefs.getBoolean(SettingsActivity.KEY_USE_TOPK, false)
+        // noAPI branch: Flow 3 always uses TopK (no API), Flow 1 uses API
         val isFlow3 = currentAuthMode() == "FaceAndVein"
-        
-        val shouldUseTopK = isFlow3 && useTopKSetting
-        Log.d(TAG, "Launch Policy: Flow3=$isFlow3, Setting=$useTopKSetting → UseTopK=$shouldUseTopK")
+        val shouldUseTopK = isFlow3 // Flow 3 → TopK only, Flow 1 → API
+        Log.d(TAG, "Launch Policy: Flow3=$isFlow3 → UseTopK=$shouldUseTopK")
         
         intent.putExtra("should_use_topk", shouldUseTopK)
         
