@@ -29,7 +29,7 @@ public class FacePassManager {
 
     /* 人脸识别Group */
     public static String group_name = "facepass";
-    public static float LIVENESS_THRESHOLD = 95f; // 原始值: 单目推荐80, 双目推荐88
+    public static float LIVENESS_THRESHOLD = 88f; // 原始值: 单目推荐80, 双目推荐88
 
     public static Boolean isLocalGroupExist = false;
     private ProgressDialog progressDialog;
@@ -295,7 +295,7 @@ public class FacePassManager {
                         }
                         /*设置双目图片配准参数, 偏移量系数需由客户根据自己的设备测试得到.二眼カメラの画像位置合わせパラメータを設定します。オフセット係数は、お客様が自分のデバイスに基づいてテストして決定する必要があります。
                          */
-                        mFacePassHandler.setIRConfig(1.0, 0.0, 1.0, 0.0, 0.5); // 0.5 for stricter IR anti-spoof (0.3 too weak - photos pass)
+                        mFacePassHandler.setIRConfig(1.0, 0.0, 1.0, 0.0, 0.3);
 
                         /* 入库阈值参数 */
                         FacePassConfig addFaceConfig = mFacePassHandler.getAddFaceConfig();

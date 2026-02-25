@@ -289,6 +289,7 @@ class TopActivity : AppCompatActivity() {
 
     // 顔認証アプリ起動（フロー1 & フロー3）
     private fun launchFaceRecognition() {
+        Log.i(TAG, "★ face and vein status starts")
         Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
         // Flow3のチェーン（顔→静脈）を実現するため、結果を待ちます
@@ -306,6 +307,7 @@ class TopActivity : AppCompatActivity() {
      * - TopActivity を finish せず onActivityResult で受け取る
      */
     private fun launchFaceRecognitionForFaceOnly() {
+        Log.i(TAG, "★ face only status starts")
         Log.i(TAG, "launchFaceRecognitionForFaceOnly: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
         startActivityForResult(intent, REQUEST_FACE)
@@ -480,6 +482,7 @@ class TopActivity : AppCompatActivity() {
                         putExtra(VeinResultActivity.EXTRA_VEIN_ID, userIdStr)
                         putExtra(VeinResultActivity.EXTRA_AUTH_MODE, currentAuthMode())
                     }
+                Log.d(TAG, "★ TopActivity: Launching VeinResultActivity (PalmSecure return path)")
                 startActivity(intent)
 
                 // フロー完了後、TopActivityでの待機は不要なら finish() はせず、VeinResultActivityに任せます。
@@ -491,6 +494,7 @@ class TopActivity : AppCompatActivity() {
         }
         // Face認証(Flow1 & Flow3)からの戻り
         else if (requestCode == REQUEST_FACE) {
+            Log.i(TAG, "★ TopActivity: onActivityResult(REQUEST_FACE) - res:$resultCode, data:${data != null}")
             if (resultCode == RESULT_OK && data != null) {
                 val status = data.getIntExtra("ResultStatus", -1)
                 val message = data.getStringExtra("ResultMessage") ?: ""
@@ -505,6 +509,7 @@ class TopActivity : AppCompatActivity() {
                         showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId)
                     } else {
                         // Flow3: 顔認証失敗 → 直接結果画面へ（再試行ボタン付き）
+                        Log.d(TAG, "★ TopActivity: Launching VeinResultActivity (Flow3 NG path)")
                         val intent = Intent(this, VeinResultActivity::class.java).apply {
                             putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, "NG")
                             putExtra(VeinResultActivity.EXTRA_VEIN_ID, resultId)
@@ -538,6 +543,7 @@ class TopActivity : AppCompatActivity() {
             putExtra("ResultID", id)
             putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "Face")
         }
+        Log.i(TAG, "★ TopActivity: Launching VeinResultActivity (Flow1 FaceOnly path)")
         startActivity(intent)
         // Flow 1 の場合は TopActivity は不要になったので終了
         // finish() 

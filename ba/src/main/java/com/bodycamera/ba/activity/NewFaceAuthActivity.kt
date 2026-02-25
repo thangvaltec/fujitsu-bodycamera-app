@@ -261,7 +261,8 @@ class NewFaceAuthActivity : AppCompatActivity() {
      * onActivityResult: Broadcast経由の結果を優先チェック
      */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        Log.d(TAG, "onActivityResult: req=$requestCode, res=$resultCode")
+        Log.i(TAG, "★ NewFaceAuthActivity: onActivityResult(req=$requestCode, res=$resultCode)")
+        Log.i(TAG, "★ NewFaceAuthActivity: PendingResponse exists? = ${mPendingAuthResponse != null}")
         
         // Broadcast経由の保留結果を優先チェック（API成功時はここで処理される）
         // ※ MakerAppはfinish()でRESULT_CANCELEDを返すため、この判定を先に行う必要がある
@@ -382,6 +383,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
      * 認証成功結果をTopActivityに返します。
      */
     private fun handleAuthResult(result: FaceAuthResponse) {
+        Log.i(TAG, "★ NewFaceAuthActivity: handleAuthResult(status=${result.status}) -> Closing this activity and returning to TopActivity")
         val data = Intent().apply {
             putExtra("ResultName", result.name)
             putExtra("ResultID", result.realId)

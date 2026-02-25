@@ -48,6 +48,7 @@ class VeinResultActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        android.util.Log.i("VeinResultActivity", "★ VeinResultActivity: Displaying result screen結果画面表示")
         setContentView(R.layout.activity_vein_result)
 
         initViews()

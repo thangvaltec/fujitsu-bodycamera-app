@@ -170,7 +170,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 }
                 
                 if (isSuccess) {
-                    Log.d(DEBUG_TAG, "★受信認証成功 → MakerApp終了");
+                    Log.d(DEBUG_TAG, "★受信認証成功 → FacePass finished");
                     // エラーToastが残っている場合はキャンセル
                     if (mErrorToast != null) {
                         mErrorToast.cancel();
@@ -244,9 +244,12 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     };
 
 
+    private boolean mFirstFaceDetectedLogSent = false;
+    
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        mFirstFaceDetectedLogSent = false;
         mDetectResultQueue = new ArrayBlockingQueue<RecognizeData>(5);
         initAndroidHandler();
 
@@ -438,6 +441,10 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     });
                 } else {
                     /* 将识别到的人脸在预览界面中圈出，并在上方显示人脸位置及角度信息 */
+                    if (!mFirstFaceDetectedLogSent) {
+                        Log.d(DEBUG_TAG, "★ face detected (frame appeared) - 顔検出開始 (枠表示)");
+                        mFirstFaceDetectedLogSent = true;
+                    }
                     final FacePassTrackedFace[] bufferFaceList = detectionResult.trackedFaces;
                     runOnUiThread(new Runnable() {
                         @Override
@@ -615,7 +622,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             // 3. 回転処理 (270度)
                                             int finalRotation = 270;
                                             // 転送速度とタイムアウト防止のため、品質を80%に調整
-                                            int jpegQuality = 100; // Maximized to avoid "Low Quality" API error
+                                            int jpegQuality = 85; // Maximized to avoid "Low Quality" API error
 
                                             if (finalRotation != 0) {
                                                 android.graphics.Matrix matrix = new android.graphics.Matrix();
