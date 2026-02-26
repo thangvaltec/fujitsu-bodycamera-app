@@ -18,7 +18,7 @@
             android:gravity="center"
             android:text="設定"
             android:textColor="#38bdf8"
-            android:textSize="24sp"
+            android:textSize="48sp"
             android:textStyle="bold" />
 
         <!-- Server URL -->
@@ -28,7 +28,7 @@
             android:layout_marginBottom="8dp"
             android:text="Server URL "
             android:textColor="#9CA3AF"
-            android:textSize="14sp" />
+            android:textSize="28sp" />
 
         <EditText
             android:id="@+id/etServerUrl"
@@ -40,6 +40,7 @@
             android:inputType="textUri"
             android:padding="12dp"
             android:textColor="#FFFFFF"
+            android:textSize="30sp"
             android:textColorHint="#4B5563" />
 
         <!-- Device ID -->
@@ -49,7 +50,7 @@
             android:layout_marginBottom="8dp"
             android:text="Device ID "
             android:textColor="#9CA3AF"
-            android:textSize="14sp" />
+            android:textSize="28sp" />
 
         <EditText
             android:id="@+id/etDeviceId"
@@ -61,6 +62,7 @@
             android:inputType="text"
             android:padding="12dp"
             android:textColor="#FFFFFF"
+            android:textSize="30sp"
             android:textColorHint="#4B5563" />
 
         <!-- Save Button -->
@@ -73,7 +75,7 @@
             android:text="保存"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:textSize="16sp"
+            android:textSize="32sp"
             android:textStyle="bold" />
 
     </LinearLayout>

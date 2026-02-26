@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">人脸识别</string>
+    <string name="app_name">顔認証</string>
 
     <string name="mcv_feature_Ari">models/mcv_feature_Ari.bin</string>
     <string name="mcv_liveness_A">models/mcv_liveness_A.bin</string>

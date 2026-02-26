@@ -15,7 +15,7 @@
         android:gravity="center"
         android:text="認証方法選択"
         android:textColor="#38bdf8"
-        android:textSize="30sp"
+        android:textSize="60sp"
         android:textStyle="bold" />
 
     <Button
@@ -27,7 +27,7 @@
         android:text="顔認証"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
-        android:textSize="20sp" />
+        android:textSize="40sp" />
 
     <View
         android:layout_width="match_parent"
@@ -42,7 +42,7 @@
         android:text="静脈認証"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
-        android:textSize="20sp" />
+        android:textSize="40sp" />
 
     <View
         android:layout_width="match_parent"
@@ -57,7 +57,7 @@
         android:text="顔と静脈認証"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
-        android:textSize="20sp" />
+        android:textSize="40sp" />
 
     <View
         android:layout_width="match_parent"
@@ -72,6 +72,6 @@
         android:text="デバイス設定"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
-        android:textSize="18sp" />
+        android:textSize="36sp" />
 
 </LinearLayout>
