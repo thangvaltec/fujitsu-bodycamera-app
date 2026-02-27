@@ -379,7 +379,7 @@ class TopActivity : AppCompatActivity() {
                         fromExternal = true
                     )
                 },
-                3500
+                2000
             )
     }
 
