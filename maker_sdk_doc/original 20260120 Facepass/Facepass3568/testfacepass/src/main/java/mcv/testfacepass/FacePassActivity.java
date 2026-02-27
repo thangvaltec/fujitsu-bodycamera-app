@@ -622,7 +622,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             // 3. 回転処理 (270度)
                                             int finalRotation = 270;
                                             // 転送速度とタイムアウト防止のため、品質を80%に調整
-                                            int jpegQuality = 85; // Maximized to avoid "Low Quality" API error
+                                            int jpegQuality = 80; // Maximized to avoid "Low Quality" API error
 
                                             if (finalRotation != 0) {
                                                 android.graphics.Matrix matrix = new android.graphics.Matrix();

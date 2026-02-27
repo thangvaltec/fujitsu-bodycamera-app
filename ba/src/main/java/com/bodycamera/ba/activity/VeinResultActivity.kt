@@ -136,8 +136,8 @@ class VeinResultActivity : AppCompatActivity() {
                 tvIdLine.visibility = View.GONE
             }
 
-            // ログ送信 (Face Only)
-            uploadAuthLog(isSuccess = true, veinId = null, veinResultStr = null)
+            // ログ送信 (Face Only) - バックグラウンドスレッドで実行してUI描画をブロックしない
+            Thread { uploadAuthLog(isSuccess = true, veinId = null, veinResultStr = null) }.start()
 
             showButtons(isSuccess = true) // Flow1 luôn nút 終了
             return
@@ -154,8 +154,8 @@ class VeinResultActivity : AppCompatActivity() {
         tvNameLabel.visibility = View.GONE
         tvName.visibility = View.GONE
 
-        // ログ送信 (Vein / FaceAndVein)
-        uploadAuthLog(isSuccess, veinId, veinResult)
+        // ログ送信 (Vein / FaceAndVein) - バックグラウンドスレッドで実行してUI描画をブロックしない
+        Thread { uploadAuthLog(isSuccess, veinId, veinResult) }.start()
 
         showButtons(isSuccess)
     }
@@ -335,10 +335,10 @@ class VeinResultActivity : AppCompatActivity() {
         showButtons(isSuccess)
 
         // ============================================
-        // ログ送信機能の呼び出し
+        // ログ送信機能の呼び出し (バックグラウンド実行)
         // 新機能: 認証結果をサーバーへ送信する
         // ============================================
-        uploadAuthLog(isSuccess, veinId, veinResult)
+        Thread { uploadAuthLog(isSuccess, veinId, veinResult) }.start()
     }
 
     /** 認証結果ログをアップロードする フローに応じてユーザーIDや認証モードを判定して送信 */
