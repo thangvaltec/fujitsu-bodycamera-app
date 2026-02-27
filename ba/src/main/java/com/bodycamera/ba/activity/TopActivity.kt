@@ -484,6 +484,7 @@ class TopActivity : AppCompatActivity() {
                     }
                 Log.d(TAG, "★ TopActivity: Launching VeinResultActivity (PalmSecure return path)")
                 startActivity(intent)
+                overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示
 
                 // フロー完了後、TopActivityでの待機は不要なら finish() はせず、VeinResultActivityに任せます。
                 // ただし、TopActivity自体はバックグラウンドにあるべきならそのままでOK。
@@ -518,6 +519,7 @@ class TopActivity : AppCompatActivity() {
                             putExtra("ResultID", resultId)
                         }
                         startActivity(intent)
+                        overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示
                     }
                 } else {
                     // Flow1: 顔認証のみ -> 結果表示画面へ
@@ -545,6 +547,7 @@ class TopActivity : AppCompatActivity() {
         }
         Log.i(TAG, "★ TopActivity: Launching VeinResultActivity (Flow1 FaceOnly path)")
         startActivity(intent)
+        overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示
         // Flow 1 の場合は TopActivity は不要になったので終了
         // finish() 
     }
