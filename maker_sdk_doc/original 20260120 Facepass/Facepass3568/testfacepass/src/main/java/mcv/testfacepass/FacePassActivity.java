@@ -1151,8 +1151,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 @Override
                 public void run() {
                     String name = dbHelper.findName(faceToken);
+                    String employeeId = dbHelper.findEmployeeId(faceToken);
                     Log.i(DEBUG_TAG, "getFaceImageByFaceToken:showToast");
-                    showToast("姓名 = " + name, Toast.LENGTH_SHORT, true, bitmap);
+                    showToast("姓名 = " + name + "\nID = " + (employeeId != null ? employeeId : ""), Toast.LENGTH_SHORT, true, bitmap);
                 }
             });
             if (bitmap != null) {

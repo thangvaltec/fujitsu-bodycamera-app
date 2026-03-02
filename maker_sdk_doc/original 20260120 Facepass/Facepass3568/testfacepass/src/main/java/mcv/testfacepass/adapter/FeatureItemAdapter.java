@@ -41,7 +41,8 @@ public class FeatureItemAdapter extends RecyclerView.Adapter<FeatureItemAdapter.
     @Override
     public void onBindViewHolder(UserItemViewHolder holder, @SuppressLint("RecyclerView") final int position) {
         final FaceFeatureBean item = list.get(position);
-        holder.name.setText(item.name);
+        holder.name.setText("氏名：" + (item.name != null ? item.name : ""));
+        holder.employeeId.setText("ID     ：" + (item.employeeId != null ? item.employeeId : ""));
         if (item.bitmap!=null){
             holder.photo.setImageBitmap(item.bitmap);
         }
@@ -71,12 +72,14 @@ public class FeatureItemAdapter extends RecyclerView.Adapter<FeatureItemAdapter.
     static class UserItemViewHolder extends RecyclerView.ViewHolder {
         ImageView photo;
         TextView name;
+        TextView employeeId;
         ImageView ivDelete;
 
         UserItemViewHolder(View itemView) {
             super(itemView);
             photo= (ImageView) itemView.findViewById(R.id.photo);
             name= (TextView) itemView.findViewById(R.id.name);
+            employeeId = (TextView) itemView.findViewById(R.id.employee_id);
             ivDelete= (ImageView) itemView.findViewById(R.id.ivDelete);
             ButterKnife.bind(this, itemView);
         }

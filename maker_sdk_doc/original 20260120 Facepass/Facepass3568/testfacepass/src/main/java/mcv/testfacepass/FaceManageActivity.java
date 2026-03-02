@@ -56,6 +56,7 @@ public class FaceManageActivity extends BaseActivity {
     ImageView showImg;
     ImageView ivGoBack;
     EditText name_edt;
+    EditText employeeIdEdt;   // <-- thêm dòng này
     RelativeLayout addFaceLayout;
     private FeatureItemAdapter adapter;
 
@@ -90,6 +91,7 @@ public class FaceManageActivity extends BaseActivity {
         showImg = (ImageView) view.findViewById(R.id.image_add);
         name_edt = (EditText) view.findViewById(R.id.name_edt);
         addFaceLayout = (RelativeLayout) view.findViewById(R.id.add_face_layout);
+        employeeIdEdt = (EditText) view.findViewById(R.id.employee_id_edt);
 
         ivGoBack = (ImageView) view.findViewById(R.id.ivGoBack);
         ivGoBack.setOnClickListener(new View.OnClickListener() {
@@ -134,9 +136,10 @@ public class FaceManageActivity extends BaseActivity {
         switch (id) {
             case R.id.ok:
                 final String name = name_edt.getText().toString().trim();
+                final String employeeId = employeeIdEdt.getText().toString().trim(); // <-- thêm dòng này
                 if (!TextUtils.isEmpty(name) && currBitmap != null) {
 
-                    featureAndSaveFacePhoto(currBitmap, currFilePath, name);
+                    featureAndSaveFacePhoto(currBitmap, currFilePath, name, employeeId);
 
                 }
                 break;
@@ -207,7 +210,7 @@ public class FaceManageActivity extends BaseActivity {
      * @param name
      * @return
      */
-    private boolean featureAndSaveFacePhoto(final Bitmap currBitmap, String headPath, final String name) {
+    private boolean featureAndSaveFacePhoto(final Bitmap currBitmap, String headPath, final String name, final String employeeId) {
 
         if (FacePassManager.mFacePassHandler == null) {
             ToastUtils.showShort("FacePassHandle is null ! ");
@@ -232,11 +235,12 @@ public class FaceManageActivity extends BaseActivity {
                             FaceFeatureBean faceBean = new FaceFeatureBean();
                             faceBean.name = name;
                             faceBean.faceId = faceToken;
+                            faceBean.employeeId = employeeId;
                             faceBean.bitmap = currBitmap;
                             faces.add(faceBean);
                             adapter.notifyDataSetChanged();
                             addFaceLayout.setVisibility(View.GONE);
-                            dbHelper.add(faceToken, name);
+                            dbHelper.add(faceToken, name, employeeId);
                         }
                     });
                 } catch (Exception e) {
@@ -377,6 +381,7 @@ public class FaceManageActivity extends BaseActivity {
     }
 
     private void getFaces() {
+        faces.clear();   // <-- thêm dòng này
         if (FacePassManager.mFacePassHandler == null) {
             ToastUtils.showShort("FacePassHandle is null ! ");
             return;
@@ -392,7 +397,10 @@ public class FaceManageActivity extends BaseActivity {
                 for (byte[] faceToken : faceTokens) {
                     if (faceToken.length > 0) {
                         FaceFeatureBean faceBean = new FaceFeatureBean();
-                        faceBean.name = dbHelper.findName(new String(faceToken));
+                        //faceBean.name = dbHelper.findName(new String(faceToken));
+                        String name = dbHelper.findName(new String(faceToken));
+                        faceBean.name = TextUtils.isEmpty(name) ? "Unknown" : name;
+                        faceBean.employeeId = dbHelper.findEmployeeId(new String(faceToken));
                         faceBean.bitmap = FacePassManager.mFacePassHandler.getFaceImage(faceToken);
                         faceBean.faceId= new String(faceToken);
                         faces.add(faceBean);

@@ -15,11 +15,12 @@ public class DatabaseHelper {
     /**
      * 添加记录
      */
-    public boolean add(String faceId, String name) {
+    public boolean add(String faceId, String name, String employee_id) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(DBHelper.FIELD_FACE_ID, faceId);
         values.put(DBHelper.FIELD_NAME, name);
+        values.put(DBHelper.FIELD_EMPLOYEE_ID, employee_id);
         long result = db.insert(DBHelper.TABLE_NAME, null, values);
         db.close();
         return result != -1;
@@ -56,5 +57,27 @@ public class DatabaseHelper {
         }
         db.close();
         return name;
+    }
+
+    /**
+     * 根据faceId查找employeeId
+     */
+    public String findEmployeeId(String faceId) {
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor cursor = db.query(DBHelper.TABLE_NAME,
+                new String[]{DBHelper.FIELD_EMPLOYEE_ID},
+                DBHelper.FIELD_FACE_ID + "=?",
+                new String[]{faceId}, null, null, null);
+
+        String employeeId = null;
+        if (cursor != null && cursor.moveToFirst()) {
+            employeeId = cursor.getString(0);
+        }
+
+        if (cursor != null) {
+            cursor.close();
+        }
+        db.close();
+        return employeeId;
     }
 }
