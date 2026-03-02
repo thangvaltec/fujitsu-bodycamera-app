@@ -341,8 +341,10 @@ public class PsDataManager {
         String[] params = new String[targetIds.size() + 2];
         params[0] = mSensorType;
         params[1] = mDataType;
+        Log.i(TAG, "★ [ID確認] DB検索: sensorType=" + mSensorType + " dataType=" + mDataType);
         for (int i = 0; i < targetIds.size(); i++) {
             params[i + 2] = targetIds.get(i);
+            Log.i(TAG, "★ [ID確認] DB検索 IN句[" + i + "] = \"" + targetIds.get(i) + "\"");
         }
 
         try {
@@ -379,9 +381,7 @@ public class PsDataManager {
                     String id = c.getString(columnId);
                     // IDとテンプレートのインデックスを揃えて管理する
                     targetIds.add(id);
-                    if (BuildConfig.DEBUG) {
-                        Log.d(TAG, "バッチ用テンプレート読み込み: ID=" + id + ", index=" + membersIndex);
-                    }
+                    Log.i(TAG, "★ [ID確認] DB検索結果 found[" + membersIndex + "] = \"" + id + "\"");
                     members[membersIndex] = PalmSecureHelper.convertByteToBIR(c.getBlob(columnVeindata));
                     membersIndex++;
                 } while (c.moveToNext());

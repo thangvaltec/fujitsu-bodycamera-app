@@ -154,6 +154,7 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
     private val handler = Handler(Looper.getMainLooper())
     private val guiListener: GUISampleListener = this
     private val service = PsService(activity, this)
+    private var batchCandidates: ArrayList<String>? = null
 
     init {
 
@@ -260,6 +261,10 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
                 // [Flow3 TopKバッチモード] 顔認証で絞り込まれた候補者リストを受け取った場合
                 // → 候補者リストを保存し、auto_start が true であれば即座にバッチ照合を開始
                 batchCandidates = candidates
+                Log.i("GUISample", "★ [ID確認] Intent受信 candidate_list: ${candidates.size}件")
+                candidates.forEachIndexed { i: Int, id: String ->
+                    Log.i("GUISample", "★ [ID確認]   candidate[$i] = \"$id\"")
+                }
                 setButtonEnable(true)
                 if (autoStart) {
                     verifyBatchClickEvent()
@@ -290,8 +295,6 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
      * 通常の 1:1 認証（verifyClickEvent）とは完全に独立した処理であり、
      * 単体動作および Flow2 には影響しない。
      */
-    private var batchCandidates: ArrayList<String>? = null
-
     private fun verifyBatchClickEvent() {
         // 候補者リストが未設定または空の場合は何もしない
         val candidates = batchCandidates ?: return
@@ -352,15 +355,19 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
 
             // Only return result if explicitly requested by caller
             val shouldReturn = activity.intent.getBooleanExtra("return_result", false)
+            Log.i("GUISample", "◆ [認証] guiSampleNotifyResult: result=$result shouldReturn=$shouldReturn")
             if (shouldReturn) {
                 try {
+                    val veinResult = if (result == Result.SUCCESSFUL) "OK" else "NG"
+                    val veinId = if (!userIdInput.text.isEmpty()) {
+                        userIdInput.text.toString().trim()
+                    } else {
+                        hiddenUserIdInput.text.toString().trim()
+                    }
+                    Log.i("GUISample", "◆ [認証] 呼び出し元へ返却: vein_result=$veinResult vein_id=$veinId")
                     val data = android.content.Intent().apply {
-                        putExtra("vein_result", if (result == Result.SUCCESSFUL) "OK" else "NG")
-                        if(!userIdInput.text.isEmpty()){
-                            putExtra("vein_id", userIdInput.text.toString().trim())
-                        }else{
-                            putExtra("vein_id", hiddenUserIdInput.text.toString().trim())
-                        }
+                        putExtra("vein_result", veinResult)
+                        putExtra("vein_id", veinId)
                     }
                     activity.setResult(android.app.Activity.RESULT_OK, data)
                     activity.finish()

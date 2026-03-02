@@ -97,6 +97,9 @@ public class PsThreadVerify extends PsThreadBase {
 			if (isBatchMode) {
 				// [TopK バッチモード] 候補者リストに含まれるIDのテンプレートのみを読み込む
 				Log.i(TAG, "★ TopKバッチ照合を開始します: 候補者数=" + candidateList.size() + "人");
+				for (int i = 0; i < candidateList.size(); i++) {
+					Log.i(TAG, "★ [ID確認] PsThreadVerify candidate[" + i + "] = " + candidateList.get(i) + ")");
+				}
 				try {
 					population = dataMng.convertDBToBioAPI_Data_Batch(candidateList);
 					if (population == null || population.BIRArray == null || population.BIRArray.NumberOfMembers == 0) {
@@ -107,9 +110,16 @@ public class PsThreadVerify extends PsThreadBase {
 						return;
 					}
 					Log.i(TAG, "★ TopKバッチ: DBから " + population.BIRArray.NumberOfMembers + "件のテンプレートを読み込みました");
-				} catch (Exception e) {
+				} catch (PalmSecureException e) {
 					Log.e(TAG, "候補者リストのテンプレート読み込みに失敗しました", e);
 					stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
+					stResult.pseErrNumber = e.ErrNumber;
+					Ps_Sample_Apl_Java_NotifyResult_Verify(stResult);
+					return;
+				} catch (PsAplException e) {
+					Log.e(TAG, "候補者リストのテンプレート読み込みに失敗しました", e);
+					stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
+					stResult.messageKey = R.string.AplErrorSystemError;
 					Ps_Sample_Apl_Java_NotifyResult_Verify(stResult);
 					return;
 				}
@@ -152,6 +162,7 @@ public class PsThreadVerify extends PsThreadBase {
 
 				// リトライ時は待機メッセージを表示してから指定時間だけ待機
 				if (verifyCnt > 0) {
+					Log.i(TAG, "◆ [認証] 静脈照合 リトライ " + verifyCnt + " 回目 / 最大 " + numberOfRetry + " 回");
 					Ps_Sample_Apl_Java_NotifyGuidance(R.string.RetryTransaction, false);
 					waitTime = 0;
 					do {
@@ -215,26 +226,30 @@ public class PsThreadVerify extends PsThreadBase {
 								timeout,
 								templateUpdate);
 
+						Log.i(TAG, "◆ [認証] JAVA_BioAPI_Identify 結果: result=" + stResult.result + " numberReturned=" + numberReturned.value);
 						if (stResult.result == PalmSecureConstant.JAVA_BioAPI_OK && numberReturned.value > 0) {
 							// 照合成功: 合致した候補者のインデックスをリフレクションで取得
 							// SDK の JAVA_BioAPI_CANDIDATE クラスから照合インデックスを取得する
 							int matchedIndex = -1;
 							try {
-								// まず "BIRIndex" フィールドを直接取得を試みる
-								java.lang.reflect.Field field = matchedCandidates[0].getClass().getField("BIRIndex");
-								matchedIndex = field.getInt(matchedCandidates[0]);
+								// BIRInArray フィールドから照合インデックスを直接取得する
+								// JAVA_BioAPI_CANDIDATE の BIRInArray (long) = 母集団配列内の一致インデックス
+								java.lang.reflect.Field field = matchedCandidates[0].getClass().getField("BIRInArray");
+								matchedIndex = (int) field.getLong(matchedCandidates[0]);
+								Log.i(TAG, "★ TopKバッチ照合 BIRInArray(matchedIndex)=" + matchedIndex);
 							} catch (Exception e) {
-								// "BIRIndex" が存在しない場合は "index" を含むフィールドをスキャン（フォールバック）
+								// フォールバック: Number型フィールドをスキャン (BIRInDataBase=byte[] はスキップされる)
 								try {
-									java.lang.reflect.Field[] fields = matchedCandidates[0].getClass().getFields();
-									for (java.lang.reflect.Field f : fields) {
-										if (f.getName().toLowerCase().contains("index")) {
-											matchedIndex = ((Number) f.get(matchedCandidates[0])).intValue();
+									for (java.lang.reflect.Field f : matchedCandidates[0].getClass().getFields()) {
+										Object value = f.get(matchedCandidates[0]);
+										if (value instanceof Number) {
+											matchedIndex = ((Number) value).intValue();
+											Log.w(TAG, "★ TopKバッチ照合 フォールバック field=" + f.getName() + " value=" + matchedIndex);
 											break;
 										}
 									}
 								} catch (Exception ignored) {
-									// インデックス取得に失敗した場合は matchedIndex = -1 のまま継続
+									Log.e(TAG, "★ TopKバッチ照合 インデックス取得に完全失敗");
 								}
 							}
 
@@ -328,6 +343,7 @@ public class PsThreadVerify extends PsThreadBase {
 			// ─── 認証ループ終了 ──────────────────────────────────────────────
 
 			// 認証結果をメインスレッドに通知する
+			Log.i(TAG, "◆ [認証] 静脈認証 最終結果: authenticated=" + stResult.authenticated + " userId=" + (stResult.userId.isEmpty() ? "(なし)" : stResult.userId.get(0)));
 			Ps_Sample_Apl_Java_NotifyResult_Verify(stResult);
 
 		} catch (Exception e) {

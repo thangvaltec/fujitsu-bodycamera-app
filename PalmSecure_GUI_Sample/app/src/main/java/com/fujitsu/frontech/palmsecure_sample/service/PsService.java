@@ -260,6 +260,7 @@ public class PsService {
 				cancelFlg = false;
 			}
 			else if (result.result != PalmSecureConstant.JAVA_BioAPI_OK) {
+				Log.e(TAG, "◆ [認証] 静脈認証 SDK エラー (result=" + result.result + ")");
 				GUIHelper helper = new GUIHelper(mActivity);
 				s = helper.getErrorMessage(result);
 				guiListener.guiSampleNotifyGuidance(s);
@@ -290,6 +291,7 @@ public class PsService {
 				requestedUserId = result.userId.get(0);
 			}
 			if (cancelFlg) {
+				Log.i(TAG, "◆ [認証] 静脈認証 キャンセル (requestedId=" + requestedUserId + ")");
 				s = mActivity.getResources().getString(R.string.VerifyCancel);
 				guiListener.guiSampleNotifyGuidance(s);
 				guiListener.guiSampleNotifyResult(Result.CANCELED);
@@ -302,6 +304,7 @@ public class PsService {
 				guiListener.guiSampleNotifyResult(Result.ERROR);
 			}
 			else if (!result.authenticated) {
+				Log.w(TAG, "◆ [認証] 静脈認証 失敗 (requestedId=" + requestedUserId + ")");
 				s = mActivity.getResources().getString(R.string.VerifyNg, requestedUserId);
 				guiListener.guiSampleNotifyGuidance(s);
 				guiListener.guiSampleNotifyResult(Result.FAILED);
@@ -316,6 +319,8 @@ public class PsService {
 					mActivity.getResources().getString(R.string.VerifyOk),
 					verifiedUserId);
 				guiListener.guiSampleNotifyGuidance(s);
+				Log.i(TAG, "◆ [認証] 静脈認証 成功 (userId=" + verifiedUserId + ")");
+				guiListener.guiSampleGetUserId(verifiedUserId);
 				guiListener.guiSampleNotifyResult(Result.SUCCESSFUL);
 			}
 			break;
