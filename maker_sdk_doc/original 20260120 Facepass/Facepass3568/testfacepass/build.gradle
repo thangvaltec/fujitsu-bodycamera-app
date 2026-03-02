@@ -27,6 +27,7 @@ android {
         exclude 'META-INF/maven/org.java-websocket/Java-WebSocket/pom.xml'
     }
     lintOptions {
+        // checkReleaseBuilds false
         abortOnError false
     }
 }
