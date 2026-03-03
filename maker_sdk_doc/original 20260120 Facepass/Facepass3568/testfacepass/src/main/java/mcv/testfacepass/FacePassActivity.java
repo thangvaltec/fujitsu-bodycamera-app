@@ -623,10 +623,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                             Log.d(DEBUG_TAG, "★ [TopK] Liveness PASSED → Recognize...");
 
-                            // ============================================================
                             // Mode Switching Logic
-                            // ============================================================
-                            
                             if (mUseTopKMode) {
                                 // MODE: TopK (Flow 3 with "Use TopK" enabled)
                                 Log.d(DEBUG_TAG, "★ [TopK Mode] Starting Local Recognition...");
@@ -651,7 +648,6 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                 
                                 if (candidates != null && candidates.length > 0) {
                                     Log.d(DEBUG_TAG, "★ [TopK] SDK Return: " + candidates.length + " candidates");
-                                    Log.d(DEBUG_TAG, "────────────────────────────────────────");
                                     int idx = 0;
 
                                     for (FacePassRecognitionResult candidate : candidates) {
@@ -685,7 +681,6 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             showRecognizeResult(candidate.trackId, searchScore, livenessScore, !TextUtils.isEmpty(faceToken));
                                         }
                                     }
-                                    Log.d(DEBUG_TAG, "────────────────────────────────────────");
                                     Log.d(DEBUG_TAG, "★ [TopK] Summary: " + candidateList.size() + "/" + candidates.length + " passed filter (score >= " + scoreFilter + ")");
                                 }
 
@@ -1069,10 +1064,10 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         TextView stateView = (TextView) toastView.findViewById(R.id.toastState);
         SpannableString s;
         if (isSuccess) {
-            s = new SpannableString("验证成功");
+            s = new SpannableString("認証成功");
             imageView.setImageResource(R.drawable.success);
         } else {
-            s = new SpannableString("验证失败");
+            s = new SpannableString("認証失敗");
             imageView.setImageResource(R.drawable.success);
         }
         if (bitmap != null) {
@@ -1109,8 +1104,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     String name = dbHelper.findName(faceToken);
                     String employeeId = dbHelper.findEmployeeId(faceToken);
                     Log.i(DEBUG_TAG, "getFaceImageByFaceToken:showToast");
-                    // showToast("姓名 = " + name, Toast.LENGTH_SHORT, true, bitmap);
-                    showToast("姓名 = " + name + "\nID = " + (employeeId != null ? employeeId : ""), Toast.LENGTH_SHORT, true, bitmap);
+                    showToast("姓名 = " + name, Toast.LENGTH_SHORT, true, bitmap);
+                    //ID を表示する場合
+                    // showToast("姓名 = " + name + "\nID = " + (employeeId != null ? employeeId : ""), Toast.LENGTH_SHORT, true, bitmap);
                 }
             });
             if (bitmap != null) {
