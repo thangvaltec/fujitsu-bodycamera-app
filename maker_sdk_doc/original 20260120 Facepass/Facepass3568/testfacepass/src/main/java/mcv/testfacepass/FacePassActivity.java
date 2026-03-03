@@ -628,9 +628,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             // ============================================================
                             
                             if (mUseTopKMode) {
-                                // ------------------------------------------------------------
                                 // MODE: TopK (Flow 3 with "Use TopK" enabled)
-                                // ------------------------------------------------------------
                                 Log.d(DEBUG_TAG, "★ [TopK Mode] Starting Local Recognition...");
                                 
                                 int topK = 5;
@@ -675,10 +673,10 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             + (searchScore >= scoreFilter ? " ✓ ACCEPTED" : " ✗ REJECTED (< " + scoreFilter + ")"));
                                         
                                         if (searchScore >= scoreFilter) {
-                                            // faceToken → userId変換（PalmSecureはuserIdを使用するため）
-                                            String userId = dbHelper.findName(faceToken);
+                                            // faceToken → employeeId変換（PalmSecureはemployeeIdを使用するため）
+                                            String userId = dbHelper.findEmployeeId(faceToken);
                                             String candidateId = (userId != null && !userId.isEmpty()) ? userId : faceToken;
-                                            Log.d(DEBUG_TAG, "    → Token→UserId: " + faceToken + " → " + candidateId);
+                                            Log.d(DEBUG_TAG, "    → Token→EmployeeId: " + faceToken + " → " + candidateId);
                                             candidateList.add(candidateId);
                                             // Debug display
                                             if (FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
@@ -723,9 +721,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                 }
 
                             } else {
-                                // ------------------------------------------------------------
                                 // MODE: Legacy (Flow 1 or Flow 3 with "Use TopK" disabled)
-                                // ------------------------------------------------------------
                                 Log.d(DEBUG_TAG, "★ [Legacy Mode] Skipping TopK. Executing Capture directly.");
                                 executeFaceCapture(recognizeData);
                             }
