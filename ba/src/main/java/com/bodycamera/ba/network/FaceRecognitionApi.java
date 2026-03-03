@@ -16,70 +16,70 @@ public class FaceRecognitionApi {
     private static final String TAG = "FaceRecognitionApi";
     private static final String BOUNDARY = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
 
+    // Cache constants as bytes to avoid repeated conversion
+    private static final byte[] LINE_FEED = "\r\n".getBytes();
+    private static final byte[] TWO_HYPHENS = "--".getBytes();
+    private static final byte[] BOUNDARY_BYTES = BOUNDARY.getBytes();
+
     /**
      * 顔認証リクエストをサーバーに送信します
-     * 
-     * @param imageFile アップロードする画像ファイル (JPEG)
-     * @param deviceId  デバイス番号(Settingsから取得)
-     * @param policeId  警官ID (オプション、null可)
-     * @param serverUrl サーバーURL (Settingsから取得)
-     * @return 生のJSONレスポンス文字列、失敗した場合はnull
      */
     public static String sendFaceRecognition(File imageFile, String deviceId, String policeId, String serverUrl) {
+        HttpURLConnection connection = null;
         try {
-            // ファイルの検証
             if (!imageFile.exists()) {
                 Log.e(TAG, "Image file not found: " + imageFile.getPath());
                 return null;
             }
 
-            // タイムスタンプ
             String timestamp = String.valueOf(System.currentTimeMillis());
-
-            // 接続設定
             URL url = new URL(serverUrl);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(15000);
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + BOUNDARY);
 
-            try (DataOutputStream outputStream = new DataOutputStream(connection.getOutputStream())) {
-
+            try (DataOutputStream outputStream = new DataOutputStream(
+                    new BufferedOutputStream(connection.getOutputStream()))) {
                 // 1. timestamp
-                addFormField(outputStream, "timestamp", timestamp);
+                writeField(outputStream, "timestamp", timestamp);
 
                 // 2. deviceId
-                addFormField(outputStream, "deviceId", deviceId != null ? deviceId : "UNKNOWN");
+                writeField(outputStream, "deviceId", deviceId != null ? deviceId : "UNKNOWN");
 
                 // 3. policeId
-                addFormField(outputStream, "policeId", policeId != null && !policeId.isEmpty() ? policeId : "null");
+                writeField(outputStream, "policeId", policeId != null && !policeId.isEmpty() ? policeId : "null");
 
                 // 4. 画像ファイル
-                outputStream.write(("--" + BOUNDARY + "\r\n").getBytes("UTF-8"));
-                outputStream.write(("Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n")
-                        .getBytes("UTF-8"));
-                outputStream.write(("Content-Type: image/jpeg\r\n\r\n").getBytes("UTF-8"));
-                outputStream.flush();
+                outputStream.write(TWO_HYPHENS);
+                outputStream.write(BOUNDARY_BYTES);
+                outputStream.write(LINE_FEED);
+                outputStream.write("Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"".getBytes());
+                outputStream.write(LINE_FEED);
+                outputStream.write("Content-Type: image/jpeg".getBytes());
+                outputStream.write(LINE_FEED);
+                outputStream.write(LINE_FEED);
 
-                // ファイルバイトデータの書き込み
                 try (FileInputStream fileInputStream = new FileInputStream(imageFile)) {
-                    byte[] buffer = new byte[4096];
+                    byte[] buffer = new byte[8192];
                     int bytesRead;
                     while ((bytesRead = fileInputStream.read(buffer)) != -1) {
                         outputStream.write(buffer, 0, bytesRead);
                     }
                 }
-                outputStream.flush();
 
-                outputStream.write(("\r\n").getBytes("UTF-8"));
+                outputStream.write(LINE_FEED);
+                outputStream.write(TWO_HYPHENS);
+                outputStream.write(BOUNDARY_BYTES);
+                outputStream.write(TWO_HYPHENS);
+                outputStream.write(LINE_FEED);
 
-                // マルチパートの終了
-                outputStream.write(("--" + BOUNDARY + "--\r\n").getBytes("UTF-8"));
+                // Final flush once at the end
                 outputStream.flush();
             }
 
-            // レスポンスの取得
             int responseCode = connection.getResponseCode();
             String responseBody;
 
@@ -92,20 +92,27 @@ public class FaceRecognitionApi {
                 Log.e(TAG, "Error " + responseCode + ": " + responseBody);
             }
 
-            connection.disconnect();
             return responseBody;
 
         } catch (Exception e) {
             Log.e(TAG, "Exception: " + e.getMessage(), e);
             return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 
-    private static void addFormField(DataOutputStream outputStream, String name, String value) throws IOException {
-        outputStream.write(("--" + BOUNDARY + "\r\n").getBytes("UTF-8"));
-        outputStream.write(("Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n").getBytes("UTF-8"));
-        outputStream.write((value + "\r\n").getBytes("UTF-8"));
-        outputStream.flush();
+    private static void writeField(DataOutputStream os, String name, String value) throws IOException {
+        os.write(TWO_HYPHENS);
+        os.write(BOUNDARY_BYTES);
+        os.write(LINE_FEED);
+        os.write(("Content-Disposition: form-data; name=\"" + name + "\"").getBytes());
+        os.write(LINE_FEED);
+        os.write(LINE_FEED);
+        os.write(value.getBytes());
+        os.write(LINE_FEED);
     }
 
     private static String readStream(InputStream inputStream) throws IOException {
