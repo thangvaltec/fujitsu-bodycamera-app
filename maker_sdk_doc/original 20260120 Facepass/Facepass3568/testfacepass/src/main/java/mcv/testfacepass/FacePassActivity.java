@@ -1171,7 +1171,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     finalHeight,
                     null);
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 100, out);
+            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 50, out); // 中間ステップのみ (RAM内)、品質50で十分
             byte[] jpegBytes = out.toByteArray();
 
             // 2. 回転処理のためにBitmapにデコード
@@ -1231,7 +1231,6 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
             boolean compressOk = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, jpegQuality, fos);
             fos.flush();
-            fos.getFD().sync(); // 物理書き込みを確実に行う
             fos.close();
 
             if (!compressOk || destFile.length() == 0) {

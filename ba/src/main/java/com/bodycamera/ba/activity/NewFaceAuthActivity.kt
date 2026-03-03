@@ -33,7 +33,11 @@ class NewFaceAuthActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "NewFaceAuthActivity"
+        private val gson = Gson()
     }
+
+    private var mServerUrl: String = ""
+    private var mDeviceId: String = ""
 
     // UIスレッドハンドラー
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -52,6 +56,12 @@ class NewFaceAuthActivity : AppCompatActivity() {
         filter.addAction(ACTION_CANDIDATE_LIST)
         registerReceiver(faceReceiver, filter)
         Log.d(TAG, "★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE & ACTION_CANDIDATE_LIST 待機開始)")
+
+        // Pre-fetch settings to avoid disk I/O during capturing flow
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
+        mServerUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "") ?: ""
+        mDeviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
+        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}")
 
         if (checkPermission()) {
             startCaptureSafe()
@@ -194,37 +204,32 @@ class NewFaceAuthActivity : AppCompatActivity() {
     private fun processFaceImage(file: File) {
         Thread {
             try {
-                // 1. 画像の前処理 (リサイズ・回転・圧縮)
-                // ※ FacePassActivity側で1024pxリサイズ済みだが、念のため再チェック
-                Log.d(TAG, "★ API処理 開始 - 元ファイル: ${file.absolutePath} (${file.length()/1024}KB)")
-                val compressedFile = compressImageIfNeeded(file)
-                Log.d(TAG, "★ API処理 圧縮後ファイル: ${compressedFile.absolutePath} (${compressedFile.length()/1024}KB)")
+                // 1. Maker App側で1024pxリサイズ・quality80処理済みのため、再圧縮は不要
+                // 再圧縮するとファイルサイズが逆に増大する（例: 69KB → 176KB）ため直接使用する
+                Log.d(TAG, "★ API処理 開始 - ファイル: ${file.absolutePath} (${file.length()/1024}KB)")
+                val compressedFile = file  // 再圧縮なし、元ファイルをそのまま使用
 
                 mainHandler.post {
                     // 必要に応じてUI更新（プログレス表示等）
                 }
 
-                // 2. 設定値の取得
-                val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
-                val serverUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "") ?: ""
-                val manualDeviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
-
-                if (serverUrl.isEmpty() || manualDeviceId.isEmpty()) {
+                // 2. 設定値の取得 (Pre-fetch済みを使用)
+                if (mServerUrl.isEmpty() || mDeviceId.isEmpty()) {
                     val msg = "設定画面でURLとデバイスIDを設定してください"
-                    Log.w(TAG, "★ API処理 設定不足: serverUrl=$serverUrl, deviceId=$manualDeviceId")
+                    Log.w(TAG, "★ API処理 設定不足: serverUrl=$mServerUrl, deviceId=$mDeviceId")
                     mainHandler.post { broadcastAuthResult(false, msg) }
                     return@Thread
                 }
 
                 val policeId = "null"
-                Log.d(TAG, "★ API送信 送信先URL: $serverUrl")
-                Log.d(TAG, "★ API送信 デバイスID: $manualDeviceId | policeId: $policeId")
+                Log.d(TAG, "★ API送信 送信先URL: $mServerUrl")
+                Log.d(TAG, "★ API送信 デバイスID: $mDeviceId | policeId: $policeId")
                 Log.d(TAG, "★ API送信 送信ファイル: ${compressedFile.name} (${compressedFile.length()/1024}KB)")
 
                 // 3. APIリクエスト送信
                 val startTime = System.currentTimeMillis()
                 val responseJson = FaceRecognitionApi.sendFaceRecognition(
-                        compressedFile, manualDeviceId, policeId, serverUrl
+                        compressedFile, mDeviceId, policeId, mServerUrl
                 )
                 val elapsed = System.currentTimeMillis() - startTime
                 Log.d(TAG, "★ API応答 応答時間: ${elapsed}ms")
@@ -233,7 +238,6 @@ class NewFaceAuthActivity : AppCompatActivity() {
                 mainHandler.post {
                     if (responseJson != null) {
                         try {
-                            val gson = Gson()
                             val result = gson.fromJson(responseJson, FaceAuthResponse::class.java)
                             
                             // ステータス判定

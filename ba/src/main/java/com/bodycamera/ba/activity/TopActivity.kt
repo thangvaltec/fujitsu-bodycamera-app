@@ -302,9 +302,12 @@ class TopActivity : AppCompatActivity() {
         Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
         
-        // noAPI branch: Flow 3 always uses TopK (no API), Flow 1 uses API
+        // Read use_topk setting from SharedPreferences — allows dynamic switching via Settings
         val isFlow3 = currentAuthMode() == "FaceAndVein"
-        val shouldUseTopK = isFlow3 // Flow 3 → TopK only, Flow 1 → API
+        val shouldUseTopK = if (isFlow3) {
+            getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
+                .getBoolean(SettingsActivity.KEY_USE_TOPK, false)
+        } else false
         Log.d(TAG, "Launch Policy: Flow3=$isFlow3 → UseTopK=$shouldUseTopK")
         
         intent.putExtra("should_use_topk", shouldUseTopK)
@@ -401,7 +404,7 @@ class TopActivity : AppCompatActivity() {
                         candidateList = candidateList
                     )
                 },
-                3500
+                2000
             )
     }
 
@@ -505,6 +508,7 @@ class TopActivity : AppCompatActivity() {
                         putExtra(VeinResultActivity.EXTRA_AUTH_MODE, currentAuthMode())
                     }
                 startActivity(intent)
+                overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示
 
                 // フロー完了後、TopActivityでの待機は不要なら finish() はせず、VeinResultActivityに任せます。
                 // ただし、TopActivity自体はバックグラウンドにあるべきならそのままでOK。
@@ -553,6 +557,7 @@ class TopActivity : AppCompatActivity() {
                             putExtra("ResultID", resultId)
                         }
                         startActivity(intent)
+                        overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示
                     }
                 } else {
                     // Flow1: 顔認証のみ -> 結果表示画面へ
@@ -579,7 +584,8 @@ class TopActivity : AppCompatActivity() {
             putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "Face")
         }
         startActivity(intent)
+        overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示
         // Flow 1 の場合は TopActivity は不要になったので終了
-        // finish() 
+        // finish()
     }
 }
