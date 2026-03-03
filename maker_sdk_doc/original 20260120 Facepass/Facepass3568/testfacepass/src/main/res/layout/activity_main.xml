@@ -21,7 +21,7 @@
          android:gravity="center_vertical"
          android:paddingTop="@dimen/dp_5"
          android:paddingBottom="@dimen/dp_5"
-         android:text="人脸识别系统"
+         android:text="顔認証システム"
          android:textColor="#fff"
          android:textSize="25dp" />
  </android.support.v7.widget.LinearLayoutCompat>
@@ -31,13 +31,13 @@
         android:id="@+id/btAddFace"
         android:layout_width="match_parent"
         android:layout_marginTop="@dimen/dp_50"
-        android:text="录入人脸"
+        android:text="顔登録"
         android:layout_height="@dimen/dp_70"/>
     <Button
         android:id="@+id/btFaceDetect"
         android:layout_width="match_parent"
         android:layout_marginTop="@dimen/dp_10"
-        android:text="人脸识别"
+        android:text="顔認証"
         android:layout_height="@dimen/dp_70"/>
 
 

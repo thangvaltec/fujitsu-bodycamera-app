@@ -81,7 +81,7 @@ public class FacePassManager {
     public void init(final Context context) {
         // 创建并显示加载对话框
         progressDialog = new ProgressDialog(context);
-        progressDialog.setMessage("SDK正在初始化...");
+        progressDialog.setMessage("SDKを初期化中...");
         progressDialog.setCancelable(false); // 不可取消
         progressDialog.show();
 

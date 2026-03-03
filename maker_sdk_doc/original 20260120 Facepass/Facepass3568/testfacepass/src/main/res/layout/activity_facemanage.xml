@@ -32,7 +32,7 @@
             android:paddingStart="@dimen/dp_15"
             android:paddingTop="@dimen/dp_5"
             android:paddingBottom="@dimen/dp_5"
-            android:text="人脸管理"
+            android:text="顔登録管理"
             android:textColor="#fff"
             android:textSize="25dp" />
     </android.support.v7.widget.LinearLayoutCompat>
@@ -71,7 +71,7 @@
             android:layout_centerVertical="true"
             android:layout_marginLeft="@dimen/dp_10"
             android:layout_toRightOf="@+id/image_add"
-            android:hint="输入姓名" />
+            android:hint="氏名を入力" />
 
         <Button
             android:id="@+id/ok"
@@ -81,7 +81,7 @@
             android:layout_centerVertical="true"
             android:layout_marginLeft="@dimen/dp_10"
             android:layout_toRightOf="@+id/name_edt"
-            android:text="保存到底库" />
+            android:text="保存" />
 
     </RelativeLayout>
 
@@ -95,7 +95,7 @@
         android:gravity="center"
         android:padding="5dp"
         android:paddingBottom="20dp"
-        android:text="拍照添加底库"
+        android:text="カメラで登録"
         android:textColor="#fff" />
 
     <TextView
@@ -108,6 +108,6 @@
         android:padding="5dp"
         android:onClick="onClick"
         android:paddingBottom="20dp"
-        android:text="图片添加底库"
+        android:text="画像から登録"
         android:textColor="#fff" />
 </LinearLayout>

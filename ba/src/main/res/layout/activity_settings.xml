@@ -18,7 +18,7 @@
             android:gravity="center"
             android:text="設定"
             android:textColor="#38bdf8"
-            android:textSize="24sp"
+            android:textSize="48sp"
             android:textStyle="bold" />
 
         <!-- Server URL -->
@@ -28,7 +28,7 @@
             android:layout_marginBottom="8dp"
             android:text="Server URL "
             android:textColor="#9CA3AF"
-            android:textSize="14sp" />
+            android:textSize="28sp" />
 
         <EditText
             android:id="@+id/etServerUrl"
@@ -40,6 +40,7 @@
             android:inputType="textUri"
             android:padding="12dp"
             android:textColor="#FFFFFF"
+            android:textSize="30sp"
             android:textColorHint="#4B5563" />
 
         <!-- Device ID -->
@@ -49,21 +50,22 @@
             android:layout_marginBottom="8dp"
             android:text="Device ID "
             android:textColor="#9CA3AF"
-            android:textSize="14sp" />
+            android:textSize="28sp" />
 
         <EditText
             android:id="@+id/etDeviceId"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp"
+            android:layout_marginBottom="32dp"
             android:background="#1F2937"
             android:hint="2222222"
             android:inputType="text"
             android:padding="12dp"
             android:textColor="#FFFFFF"
+            android:textSize="30sp"
             android:textColorHint="#4B5563" />
 
-        <!-- TopK Setting -->
+        　　　　<!-- TopK Setting -->
         <CheckBox
             android:id="@+id/cbUseTopK"
             android:layout_width="match_parent"
@@ -71,7 +73,8 @@
             android:layout_marginBottom="32dp"
             android:text="Flow3 (Face+Vein) uses TopK"
             android:textColor="#FFFFFF"
-            android:buttonTint="#0EA5E9" />
+            android:buttonTint="#0EA5E9"
+            android:textSize="20sp"/>
 
         <!-- Save Button -->
         <Button
@@ -83,7 +86,7 @@
             android:text="保存"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:textSize="16sp"
+            android:textSize="32sp"
             android:textStyle="bold" />
 
     </LinearLayout>
