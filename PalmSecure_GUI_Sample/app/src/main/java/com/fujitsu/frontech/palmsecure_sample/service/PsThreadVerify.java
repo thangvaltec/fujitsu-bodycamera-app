@@ -104,8 +104,9 @@ public class PsThreadVerify extends PsThreadBase {
 					population = dataMng.convertDBToBioAPI_Data_Batch(candidateList);
 					if (population == null || population.BIRArray == null || population.BIRArray.NumberOfMembers == 0) {
 						// DBに該当するテンプレートが存在しない場合はNG扱い
-						Log.w(TAG, "★ TopKバッチ: DBにテンプレートが見つかりませんでした");
-						stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
+						Log.w(TAG, "★ TopKバッチ: DBにテンプレートが見つかりませんでした（未登録ユーザー）");
+						stResult.result = PalmSecureConstant.JAVA_BioAPI_OK;
+						stResult.authenticated = false;
 						Ps_Sample_Apl_Java_NotifyResult_Verify(stResult);
 						return;
 					}

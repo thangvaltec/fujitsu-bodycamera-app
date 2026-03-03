@@ -267,7 +267,12 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
                 }
                 setButtonEnable(true)
                 if (autoStart) {
-                    verifyBatchClickEvent()
+                    if (service.getIdList().isEmpty()) {
+                        Log.w("GUISample", "★ [Flow3] 静脈データが1件も登録されていません → スキャンをスキップ")
+                        returnNoVeinData()
+                    } else {
+                        verifyBatchClickEvent()
+                    }
                 }
             } else if (mode == "verify" && !faceId.isNullOrEmpty()) {
                 // [Flow2 静脈のみモード] 単一のユーザーIDで 1:1 静脈認証を行う場合
@@ -275,15 +280,45 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
                 userIdInput.setText(faceId)
                 setButtonEnable(true)
                 if (autoStart) {
-                    verifyClickEvent()
+                    if (service.getIdList().isEmpty()) {
+                        Log.w("GUISample", "★ [Flow2-verify] 静脈データが1件も登録されていません → スキャンをスキップ")
+                        returnNoVeinData()
+                    } else {
+                        verifyClickEvent()
+                    }
                 }
             } else if (mode == "identify") {
-                // [識別モード] IDなしで全登録ユーザーと照合する場合
+                // [Flow2/識別モード] IDなしで全登録ユーザーと照合する場合
                 if (autoStart) {
-                    identifyClickEvent()
+                    if (service.getIdList().isEmpty()) {
+                        Log.w("GUISample", "★ [Flow2-identify] 静脈データが1件も登録されていません → スキャンをスキップ")
+                        returnNoVeinData()
+                    } else {
+                        identifyClickEvent()
+                    }
                 }
             }
             // 上記条件に合致しない場合は手動操作待ちの通常状態（PalmSecure単体動作）
+        }
+    }
+
+    /**
+     * 静脈データが1件も登録されていない場合に即座に呼び出し元へ返す。
+     * スキャンを開始せずに NG + no_vein_data=true を返却し、Activity を終了する。
+     */
+    private fun returnNoVeinData() {
+        val shouldReturn = activity.intent.getBooleanExtra("return_result", false)
+        if (shouldReturn) {
+            handler.post {
+                val data = android.content.Intent().apply {
+                    putExtra("vein_result", "NG")
+                    putExtra("vein_id", "")
+                    putExtra("not_registered", true)
+                    putExtra("no_vein_data", true)
+                }
+                activity.setResult(android.app.Activity.RESULT_OK, data)
+                activity.finish()
+            }
         }
     }
 
@@ -364,10 +399,20 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
                     } else {
                         hiddenUserIdInput.text.toString().trim()
                     }
-                    Log.i("GUISample", "◆ [認証] 呼び出し元へ返却: vein_result=$veinResult vein_id=$veinId")
+
+                    // 未登録判定: 認証失敗時に静脈IDが存在しないか確認する
+                    val notRegistered = if (result == Result.FAILED) {
+                        // Flow2: batchCandidatesなし → 常に未登録扱い
+                        // Flow3: VerifyBatch失敗 → 静脈が誰にも一致しない = 未登録扱い
+                        true
+                    } else {
+                        false
+                    }
+                    Log.i("GUISample", "◆ [認証] 呼び出し元へ返却: vein_result=$veinResult vein_id=$veinId not_registered=$notRegistered")
                     val data = android.content.Intent().apply {
                         putExtra("vein_result", veinResult)
                         putExtra("vein_id", veinId)
+                        putExtra("not_registered", notRegistered)
                     }
                     activity.setResult(android.app.Activity.RESULT_OK, data)
                     activity.finish()
