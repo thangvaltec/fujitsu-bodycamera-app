@@ -573,23 +573,23 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                         
                                         // ★ Score log (printed BEFORE capture so it's always visible)
                                         Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (threshold: " + result.livenessThreshold + ")");
-                                        
-                                        // Anti-spoof: スコアが最低基準を満たすかチェック
-                                        // if (result.livenessScore < LIVENESS_SCORE_MINIMUM) {
-                                        //     Log.w(DEBUG_TAG, "★ Score TOO LOW: " + result.livenessScore + " < " + LIVENESS_SCORE_MINIMUM + " → REJECTED (possible photo)");
-                                        //     break; // Treat as failed - don't increment pass count
-                                        // }
-                                        
+                                        /* 
+                                         Anti-spoof: スコアが最低基準を満たすかチェック
+                                         if (result.livenessScore < LIVENESS_SCORE_MINIMUM) {
+                                             Log.w(DEBUG_TAG, "★ Score TOO LOW: " + result.livenessScore + " < " + LIVENESS_SCORE_MINIMUM + " → REJECTED (possible photo)");
+                                             break; // Treat as failed - don't increment pass count
+                                         }
+                                        */
                                         livenessOK = true;
+                                        /* 
+                                         なりすまし安定化: trackIdに依存せず、連続PASS回数のみカウント
+                                         mConsecutivePassCount++;
                                         
-                                        // なりすまし安定化: trackIdに依存せず、連続PASS回数のみカウント
-                                        // なりすまし安定化: trackIdに依存せず、連続PASS回数のみカウント
-                                        // mConsecutivePassCount++;
-                                        
-                                        // if (mConsecutivePassCount < REQUIRED_PASS_COUNT) {
-                                        //     Log.d(DEBUG_TAG, "Liveness: PASS (Count: " + mConsecutivePassCount + "/" + REQUIRED_PASS_COUNT + ") - Waiting for confirmation...");
-                                        //     break; 
-                                        // }
+                                         if (mConsecutivePassCount < REQUIRED_PASS_COUNT) {
+                                             Log.d(DEBUG_TAG, "Liveness: PASS (Count: " + mConsecutivePassCount + "/" + REQUIRED_PASS_COUNT + ") - Waiting for confirmation...");
+                                             break; 
+                                         }
+                                        */
 
                                         // Capture logic moved to executeFaceCapture()
                                         // Mode switching below will handle TopK or Legacy capture
@@ -787,17 +787,18 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
     private void initView() {
 
-
-//        int windowRotation = ((WindowManager) (getApplicationContext().getSystemService(Context.WINDOW_SERVICE))).getDefaultDisplay().getRotation() * 90;
-//        if (windowRotation == 0) {
-//            cameraRotation = FacePassImageRotation.DEG90;
-//        } else if (windowRotation == 90) {
-//            cameraRotation = FacePassImageRotation.DEG0;
-//        } else if (windowRotation == 270) {
-//            cameraRotation = FacePassImageRotation.DEG180;
-//        } else {
-//            cameraRotation = FacePassImageRotation.DEG270;
-//        }
+        /*
+        int windowRotation = ((WindowManager) (getApplicationContext().getSystemService(Context.WINDOW_SERVICE))).getDefaultDisplay().getRotation() * 90;
+        if (windowRotation == 0) {
+            cameraRotation = FacePassImageRotation.DEG90;
+        } else if (windowRotation == 90) {
+            cameraRotation = FacePassImageRotation.DEG0;
+        } else if (windowRotation == 270) {
+            cameraRotation = FacePassImageRotation.DEG180;
+        } else {
+            cameraRotation = FacePassImageRotation.DEG270;
+        }
+        */
         Log.i(DEBUG_TAG, "cameraRation: " + cameraRotation);
         cameraFacingFront = true;
         SharedPreferences preferences = getSharedPreferences(SettingVar.SharedPrefrence, Context.MODE_PRIVATE);
@@ -951,17 +952,17 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mAndroidHandler.removeCallbacksAndMessages(null);
         }
 
-        // ★ SDK解放をコメントアウト（パフォーマンス最適化）
-        // 理由: FacePassActivity終了時にSDKを解放すると、次回起動時に再初期化（1-2秒）が必要になる。
-        // SDKをプロセス内に保持することで、2回目以降のカメラ起動が即時になる。
-        // SDKの解放はMainActivity.onDestroy()でのみ行う（アプリ完全終了時）。
-        // if (FacePassManager.mFacePassHandler != null) {
-        //     FacePassManager.mFacePassHandler.release();
-        //     FacePassManager.mFacePassHandler = null;
-        //     Log.d(DEBUG_TAG, "FacePassActivity.onDestroy: Released SDK.");
-        // }
-        // FacePassManager.getInstance().isInitFinished = false;
-
+        /* ★ SDK解放をコメントアウト（パフォーマンス最適化）
+         理由: FacePassActivity終了時にSDKを解放すると、次回起動時に再初期化（1-2秒）が必要になる。
+         SDKをプロセス内に保持することで、2回目以降のカメラ起動が即時になる。
+         SDKの解放はMainActivity.onDestroy()でのみ行う（アプリ完全終了時）。
+         if (FacePassManager.mFacePassHandler != null) {
+             FacePassManager.mFacePassHandler.release();
+             FacePassManager.mFacePassHandler = null;
+             Log.d(DEBUG_TAG, "FacePassActivity.onDestroy: Released SDK.");
+         }
+         FacePassManager.getInstance().isInitFinished = false;
+        */
         super.onDestroy();
     }
 
@@ -1182,8 +1183,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
             // 3. 回転処理 (270度)
             int finalRotation = 270;
-            // 転送速度とタイムアウト防止のため、品質を80%に調整
-            int jpegQuality = 100; // Maximized to avoid "Low Quality" API error
+            // 転送速度とタイムアウト防止のため、品質を80~100%に調整
+            int jpegQuality = 80; // Maximized to avoid "Low Quality" API error
 
             if (finalRotation != 0) {
                 android.graphics.Matrix matrix = new android.graphics.Matrix();
