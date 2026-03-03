@@ -11,4 +11,5 @@ public class FaceFeatureBean implements Serializable {
     public Bitmap bitmap;
     public String faceId;
     public String name;
+    public String employeeId;
 }

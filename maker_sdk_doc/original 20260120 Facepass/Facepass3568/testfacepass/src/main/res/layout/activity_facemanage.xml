@@ -64,14 +64,29 @@
             android:layout_width="80dp"
             android:layout_height="80dp" />
 
-        <EditText
-            android:id="@+id/name_edt"
-            android:layout_width="@dimen/dp_150"
+        <!-- Input vertical -->
+        <LinearLayout
+            android:id="@+id/input_layout"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_toRightOf="@id/image_add"
+            android:layout_marginStart="10dp"
             android:layout_centerVertical="true"
-            android:layout_marginLeft="@dimen/dp_10"
-            android:layout_toRightOf="@+id/image_add"
-            android:hint="氏名を入力" />
+            android:orientation="vertical">
+
+            <EditText
+                android:id="@+id/name_edt"
+                android:layout_width="150dp"
+                android:layout_height="wrap_content"
+                android:hint="名前を入力" />
+
+            <EditText
+                android:id="@+id/employee_id_edt"
+                android:layout_width="150dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="5dp"
+                android:hint="社員番号" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/ok"
@@ -80,7 +95,7 @@
             android:onClick="onClick"
             android:layout_centerVertical="true"
             android:layout_marginLeft="@dimen/dp_10"
-            android:layout_toRightOf="@+id/name_edt"
+            android:layout_toRightOf="@+id/input_layout"
             android:text="保存" />
 
     </RelativeLayout>
