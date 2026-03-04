@@ -277,12 +277,13 @@
         <!-- XMLの最後に配置することで最前面に描画され、カメラ映像に隠れない。 -->
         <ImageButton
             android:id="@+id/btnGoBack"
-            android:layout_width="60dp"
-            android:layout_height="60dp"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:src="@drawable/ic_go_back_white"
-            android:background="@android:color/transparent"
+            android:background="@drawable/bg_go_back_button"
             android:scaleType="fitCenter"
-            android:padding="8dp"
+            app:tint="#000000"
+            android:padding="12dp"
             android:layout_margin="12dp"
             android:contentDescription="戻る"
             android:visibility="gone"
