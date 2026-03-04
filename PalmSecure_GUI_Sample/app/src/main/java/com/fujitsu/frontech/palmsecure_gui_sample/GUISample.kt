@@ -24,6 +24,7 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -230,6 +231,10 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
             listUsersButton.setOnClickListener(this)
             deleteUserButton.setOnClickListener(this)
 //            activity.findViewById<Button>(R.id.captureButton)?.setOnClickListener(this)
+            // 外部アプリ（認証デモ）から起動した場合のみ「戻る」ボタンを表示
+            val btnGoBack = activity.findViewById<ImageButton>(R.id.btnGoBack)
+            btnGoBack.visibility = View.GONE // デフォルト非表示（後で fromExternal に応じて切り替え）
+            btnGoBack.setOnClickListener { activity.finish() }
             setButtonEnable(true)
 
             // BodyCameraアプリからの外部起動時インテント情報を読み取る
@@ -251,9 +256,11 @@ class GUISample(parent: MainActivity) : View.OnClickListener, GUISampleListener,
             if (fromExternal == true){
                 buttonLayout.visibility = View.INVISIBLE
                 buttonLayout2.visibility = View.VISIBLE
+                btnGoBack.visibility = View.VISIBLE  // 認証デモからの遷移時のみ表示
             }else{
                 buttonLayout.visibility = View.VISIBLE
                 buttonLayout2.visibility = View.INVISIBLE
+                btnGoBack.visibility = View.GONE     // 単体起動時は非表示
             }
 
             // ─── 起動モードに応じた自動処理 ──────────────────────────────────

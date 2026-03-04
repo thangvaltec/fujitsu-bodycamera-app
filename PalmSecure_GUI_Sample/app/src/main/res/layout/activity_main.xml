@@ -273,6 +273,22 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/backView" />
 
+        <!-- 戻るボタン: カメラ画面左上にオーバーレイ表示。TopActivityへ戻る。認証デモからの起動時のみ表示。 -->
+        <!-- XMLの最後に配置することで最前面に描画され、カメラ映像に隠れない。 -->
+        <ImageButton
+            android:id="@+id/btnGoBack"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:src="@drawable/ic_go_back_white"
+            android:background="@android:color/transparent"
+            android:scaleType="fitCenter"
+            android:padding="8dp"
+            android:layout_margin="12dp"
+            android:contentDescription="戻る"
+            android:visibility="gone"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent" />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
