@@ -14,11 +14,11 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="20dp"
             android:gravity="center"
             android:text="設定"
             android:textColor="#38bdf8"
-            android:textSize="48sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <!-- Server URL -->
@@ -28,7 +28,7 @@
             android:layout_marginBottom="8dp"
             android:text="Server URL "
             android:textColor="#9CA3AF"
-            android:textSize="28sp" />
+            android:textSize="20sp" />
 
         <EditText
             android:id="@+id/etServerUrl"
@@ -40,7 +40,7 @@
             android:inputType="textUri"
             android:padding="12dp"
             android:textColor="#FFFFFF"
-            android:textSize="30sp"
+            android:textSize="20sp"
             android:textColorHint="#4B5563" />
 
         <!-- Device ID -->
@@ -50,7 +50,7 @@
             android:layout_marginBottom="8dp"
             android:text="Device ID "
             android:textColor="#9CA3AF"
-            android:textSize="28sp" />
+            android:textSize="20sp" />
 
         <EditText
             android:id="@+id/etDeviceId"
@@ -62,19 +62,90 @@
             android:inputType="text"
             android:padding="12dp"
             android:textColor="#FFFFFF"
-            android:textSize="30sp"
+            android:textSize="20sp"
             android:textColorHint="#4B5563" />
 
+        <!-- Identification Distance -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="識別距離"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
+        <RadioGroup
+            android:id="@+id/rgIdentDistance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <RadioButton
+                android:id="@+id/rbDist05"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="0.5m"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="20sp" />
+
+            <RadioButton
+                android:id="@+id/rbDist10"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1m"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="20sp" />
+
+            <RadioButton
+                android:id="@+id/rbDist15"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="1.5m"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="20sp" />
+
+            <RadioButton
+                android:id="@+id/rbDist20"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="2m"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="20sp" />
+        </RadioGroup>
+
         <!-- Liveness Threshold -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="なりすまし防止閾値 (Liveness)"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
         <EditText
             android:id="@+id/etLivenessThreshold"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="88"
+            android:layout_marginBottom="24dp"
+            android:background="#1F2937"
+            android:hint="88.0"
             android:inputType="numberDecimal"
-            android:layout_marginTop="10dp"/>
+            android:padding="12dp"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textColorHint="#4B5563" />
 
-        　　　　<!-- TopK Setting -->
+        <!-- TopK Setting -->
         <CheckBox
             android:id="@+id/cbUseTopK"
             android:layout_width="match_parent"
@@ -91,11 +162,11 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:backgroundTint="#0EA5E9"
-            android:padding="16dp"
+            android:padding="10dp"
             android:text="保存"
             android:textAllCaps="false"
             android:textColor="#FFFFFF"
-            android:textSize="32sp"
+            android:textSize="20sp"
             android:textStyle="bold" />
 
     </LinearLayout>

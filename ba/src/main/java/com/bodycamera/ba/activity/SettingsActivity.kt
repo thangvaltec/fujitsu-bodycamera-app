@@ -20,6 +20,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var etServerUrl: EditText
     private lateinit var etDeviceId: EditText
     private lateinit var etLivenessThreshold: EditText
+    private lateinit var rgIdentDistance: android.widget.RadioGroup
     private lateinit var cbUseTopK: android.widget.CheckBox // Added
     private lateinit var btnSave: Button
     private lateinit var prefs: SharedPreferences
@@ -30,6 +31,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_USE_TOPK = "use_topk" // Added
         const val KEY_LIVENESS_THRESHOLD = "liveness_threshold"//なりまし防止スコア
+        const val KEY_IDENT_DISTANCE = "ident_distance" // 距離設定 (0, 1, 2, 3 corresponding to 0.5m, 1m, 1.5m, 2m)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +43,7 @@ class SettingsActivity : AppCompatActivity() {
         etServerUrl = findViewById(R.id.etServerUrl)
         etDeviceId = findViewById(R.id.etDeviceId)
         etLivenessThreshold = findViewById(R.id.etLivenessThreshold)
+        rgIdentDistance = findViewById(R.id.rgIdentDistance)
         cbUseTopK = findViewById(R.id.cbUseTopK) // Added
         btnSave = findViewById(R.id.btnSave)
 
@@ -54,11 +57,20 @@ class SettingsActivity : AppCompatActivity() {
         val deviceId = prefs.getString(KEY_DEVICE_ID, "")
         val useTopK = prefs.getBoolean(KEY_USE_TOPK, false) // Default false
         val livenessThreshold = prefs.getFloat(KEY_LIVENESS_THRESHOLD, 88.0f)
+        val identDistIndex = prefs.getInt(KEY_IDENT_DISTANCE, 1) // Default to 1m (index 1)
 
         etServerUrl.setText(url)
         etDeviceId.setText(deviceId)
         etLivenessThreshold.setText(livenessThreshold.toString())
         cbUseTopK.isChecked = useTopK // Added
+        
+        // Set RadioButton based on saved index
+        when (identDistIndex) {
+            0 -> findViewById<android.widget.RadioButton>(R.id.rbDist05).isChecked = true
+            1 -> findViewById<android.widget.RadioButton>(R.id.rbDist10).isChecked = true
+            2 -> findViewById<android.widget.RadioButton>(R.id.rbDist15).isChecked = true
+            3 -> findViewById<android.widget.RadioButton>(R.id.rbDist20).isChecked = true
+        }
     }
 
     private fun saveSettings() {
@@ -67,6 +79,14 @@ class SettingsActivity : AppCompatActivity() {
         val useTopK = cbUseTopK.isChecked // Added
         val livenessStr = etLivenessThreshold.text.toString()
         val livenessVal = if (livenessStr.isEmpty()) 88.0f else livenessStr.toFloat()
+        
+        val identDistIndex = when (rgIdentDistance.checkedRadioButtonId) {
+            R.id.rbDist05 -> 0
+            R.id.rbDist10 -> 1
+            R.id.rbDist15 -> 2
+            R.id.rbDist20 -> 3
+            else -> 1
+        }
 
         if (url.isEmpty()) {
             etServerUrl.error = "サーバーURLを入力してください"
@@ -83,6 +103,7 @@ class SettingsActivity : AppCompatActivity() {
             putString(KEY_DEVICE_ID, deviceId)
             putBoolean(KEY_USE_TOPK, useTopK) // Added
             putFloat(KEY_LIVENESS_THRESHOLD, livenessVal)
+            putInt(KEY_IDENT_DISTANCE, identDistIndex)
             apply()
         }
 

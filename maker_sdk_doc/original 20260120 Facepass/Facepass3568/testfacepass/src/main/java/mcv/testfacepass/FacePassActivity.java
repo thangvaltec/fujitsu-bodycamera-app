@@ -266,7 +266,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mUseTopKMode = intent.getBooleanExtra("should_use_topk", false);
             float threshold = intent.getFloatExtra("liveness_threshold", 88.0f);
             FacePassManager.LIVENESS_THRESHOLD = threshold; // Apply global setting
-            Log.d(DEBUG_TAG, "★  パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThreshold=" + threshold);
+            
+            int faceMinThreshold = intent.getIntExtra("face_min_threshold", 100);
+            FacePassManager.FACE_MIN_THRESHOLD = faceMinThreshold;
+            
+            Log.d(DEBUG_TAG, "★ パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThreshold=" + threshold + ", FaceMinThreshold=" + faceMinThreshold);
         }
 
         /* 初始化界面 */

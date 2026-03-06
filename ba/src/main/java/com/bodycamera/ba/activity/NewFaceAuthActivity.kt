@@ -66,7 +66,15 @@ class NewFaceAuthActivity : AppCompatActivity() {
         mServerUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "") ?: ""
         mDeviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
         val livenessThreshold = prefs.getFloat(SettingsActivity.KEY_LIVENESS_THRESHOLD, 88.0f)
-        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}, Liveness=$livenessThreshold")
+        val identDistIndex = prefs.getInt(SettingsActivity.KEY_IDENT_DISTANCE, 1)
+        val faceMinThreshold = when (identDistIndex) {
+            0 -> 150
+            1 -> 100
+            2 -> 60
+            3 -> 25
+            else -> 100
+        }
+        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}, Liveness=$livenessThreshold, DistanceIndex: $identDistIndex -> FaceMinThreshold: $faceMinThreshold")
 
         if (checkPermission()) {
             startCaptureSafe()
