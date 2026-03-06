@@ -264,7 +264,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mDeviceId = intent.getStringExtra("device_id");
             mPoliceId = intent.getStringExtra("police_id");
             mUseTopKMode = intent.getBooleanExtra("should_use_topk", false);
-            Log.d(DEBUG_TAG, "★  パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode);
+            float threshold = intent.getFloatExtra("liveness_threshold", 88.0f);
+            FacePassManager.LIVENESS_THRESHOLD = threshold; // Apply global setting
+            Log.d(DEBUG_TAG, "★  パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThreshold=" + threshold);
         }
 
         /* 初始化界面 */
@@ -489,10 +491,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             for (int i = 0; i < detectionResult.images.length; ++i) {
                                 if (detectionResult.images[i].rcAttr.respiratorType != FacePassRCAttribute.FacePassRespiratorType.NO_RESPIRATOR) {
                                     float searchThreshold = 60f;
-                                    float livenessThreshold = 88f; // -1.0f will not change the liveness threshold
+                                    float livenessThreshold = FacePassManager.LIVENESS_THRESHOLD; // Use dynamic setting
                                     trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, searchThreshold, livenessThreshold);
                                 } else {
-                                    trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, -1f, -1f);
+                                    // Use global setting for non-mask case as well to ensure consistency
+                                    trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, -1f, FacePassManager.LIVENESS_THRESHOLD);
                                 }
                                 Log.d(DEBUG_TAG, String.format("rc attribute in FacePassImage, hairType: 0x%x beardType: 0x%x hatType: 0x%x respiratorType: 0x%x glassesType: 0x%x skinColorType: 0x%x",
                                         detectionResult.images[i].rcAttr.hairType.ordinal(),

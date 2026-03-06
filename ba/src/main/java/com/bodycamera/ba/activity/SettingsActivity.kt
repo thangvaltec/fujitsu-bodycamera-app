@@ -19,6 +19,7 @@ class SettingsActivity : AppCompatActivity() {
     // Layout and Preference keys
     private lateinit var etServerUrl: EditText
     private lateinit var etDeviceId: EditText
+    private lateinit var etLivenessThreshold: EditText
     private lateinit var cbUseTopK: android.widget.CheckBox // Added
     private lateinit var btnSave: Button
     private lateinit var prefs: SharedPreferences
@@ -28,6 +29,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_SERVER_URL = "server_url"
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_USE_TOPK = "use_topk" // Added
+        const val KEY_LIVENESS_THRESHOLD = "liveness_threshold"//なりまし防止スコア
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,6 +40,7 @@ class SettingsActivity : AppCompatActivity() {
 
         etServerUrl = findViewById(R.id.etServerUrl)
         etDeviceId = findViewById(R.id.etDeviceId)
+        etLivenessThreshold = findViewById(R.id.etLivenessThreshold)
         cbUseTopK = findViewById(R.id.cbUseTopK) // Added
         btnSave = findViewById(R.id.btnSave)
 
@@ -50,9 +53,11 @@ class SettingsActivity : AppCompatActivity() {
         val url = prefs.getString(KEY_SERVER_URL, "")
         val deviceId = prefs.getString(KEY_DEVICE_ID, "")
         val useTopK = prefs.getBoolean(KEY_USE_TOPK, false) // Default false
+        val livenessThreshold = prefs.getFloat(KEY_LIVENESS_THRESHOLD, 88.0f)
 
         etServerUrl.setText(url)
         etDeviceId.setText(deviceId)
+        etLivenessThreshold.setText(livenessThreshold.toString())
         cbUseTopK.isChecked = useTopK // Added
     }
 
@@ -60,6 +65,8 @@ class SettingsActivity : AppCompatActivity() {
         val url = etServerUrl.text.toString().trim()
         val deviceId = etDeviceId.text.toString().trim()
         val useTopK = cbUseTopK.isChecked // Added
+        val livenessStr = etLivenessThreshold.text.toString()
+        val livenessVal = if (livenessStr.isEmpty()) 88.0f else livenessStr.toFloat()
 
         if (url.isEmpty()) {
             etServerUrl.error = "サーバーURLを入力してください"
@@ -75,6 +82,7 @@ class SettingsActivity : AppCompatActivity() {
             putString(KEY_SERVER_URL, url)
             putString(KEY_DEVICE_ID, deviceId)
             putBoolean(KEY_USE_TOPK, useTopK) // Added
+            putFloat(KEY_LIVENESS_THRESHOLD, livenessVal)
             apply()
         }
 

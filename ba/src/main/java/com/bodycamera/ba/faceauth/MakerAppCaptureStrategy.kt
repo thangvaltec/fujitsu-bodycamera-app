@@ -29,10 +29,12 @@ class MakerAppCaptureStrategy : FaceCaptureStrategy {
         val prefs = activity.getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
         val serverUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "")
         val deviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "")
+        val livenessThreshold = prefs.getFloat(SettingsActivity.KEY_LIVENESS_THRESHOLD, 88.0f)
         
         intent.putExtra("server_url", serverUrl)
         intent.putExtra("device_id", deviceId)
         intent.putExtra("police_id", "null")
+        intent.putExtra("liveness_threshold", livenessThreshold)
         
         // Pass use_topk flag if present
         if (options != null && options.containsKey("should_use_topk")) {

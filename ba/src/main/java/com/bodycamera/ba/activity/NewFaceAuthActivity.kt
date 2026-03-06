@@ -65,7 +65,8 @@ class NewFaceAuthActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
         mServerUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "") ?: ""
         mDeviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
-        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}")
+        val livenessThreshold = prefs.getFloat(SettingsActivity.KEY_LIVENESS_THRESHOLD, 88.0f)
+        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}, Liveness=$livenessThreshold")
 
         if (checkPermission()) {
             startCaptureSafe()
