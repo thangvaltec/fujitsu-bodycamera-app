@@ -89,6 +89,8 @@ dependencies {
     implementation "com.google.android.material:material:${materialVersion}"
     implementation "androidx.constraintlayout:constraintlayout:${constraintlayoutVersion}"
     implementation "androidx.databinding:databinding-runtime:${databindingVersion}"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.6.1"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
     testImplementation "junit:junit:${junitVersion}"
     androidTestImplementation "androidx.test.ext:junit:${extjunitVersion}"
     androidTestImplementation "androidx.test.espresso:espresso-core:${espressoCoreVersion}"
