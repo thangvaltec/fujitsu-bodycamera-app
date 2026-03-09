@@ -440,6 +440,72 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     continue;
                 }
 
+                /* ★ 手動距離フィルタリング (Identification Distance Setting) 
+                 * SDKの初期化設定(FaceMinThreshold)はシングルトン保持のため、実行時に動的に変更できない場合がある。
+                 * そのため、SDKから返された結果をこちらで手動でフィルタリングし、設定より遠い（小さい）顔を無視する。
+                 */
+                final java.util.Set<Long> validTrackIds = new java.util.HashSet<>();
+                if (detectionResult != null && detectionResult.trackedFaces != null && detectionResult.trackedFaces.length > 0) {
+                    java.util.List<FacePassTrackedFace> filteredFaces = new java.util.ArrayList<>();
+                    
+                    for (FacePassTrackedFace face : detectionResult.trackedFaces) {
+                        int faceWidth = (int) (face.rect.right - face.rect.left);
+                        int faceHeight = (int) (face.rect.bottom - face.rect.top);
+                        int faceSize = Math.max(faceWidth, faceHeight);
+
+                        Log.d("FaceDistanceDebug",
+                        "trackId: " + face.trackId +
+                        "width=" + faceWidth +
+                        "height=" + faceHeight +
+                        "faceSize=" + faceSize +
+                        "threshold=" + FacePassManager.FACE_MIN_THRESHOLD
+                        );
+                        if (faceSize >= FacePassManager.FACE_MIN_THRESHOLD) {
+                            filteredFaces.add(face);
+                            validTrackIds.add(face.trackId);
+
+                            Log.d("FaceDistanceDebug", "FACE ACCEPTED");
+                        }else {
+                            Log.d("FaceDistanceDebug", "FACE REJECTED (too far)");
+                        }
+                    }
+                    
+                    // UI表示用リストを更新（これで遠い顔に白い枠が出なくなる）
+                    detectionResult.trackedFaces = filteredFaces.toArray(new FacePassTrackedFace[0]);
+                    
+                    // 処理用（キャプチャ・認証用）リストも更新
+                    if (detectionResult.images != null && detectionResult.images.length > 0) {
+                        java.util.List<Object> filteredImagesList = new java.util.ArrayList<>();
+                        for (int i = 0; i < detectionResult.images.length; i++) {
+                            // images[i]の型名(FacePassImageRet)を直接使わず、インデックスアクセスでtrackIdを確認
+                            if (validTrackIds.contains(detectionResult.images[i].trackId)) {
+                                filteredImagesList.add(detectionResult.images[i]);
+                            }
+                        }
+                        
+                        if (filteredImagesList.size() < detectionResult.images.length) {
+                             // reflectionを使用して、元の配列と同じ型の新しい配列を作成
+                             Object newImages = java.lang.reflect.Array.newInstance(
+                                 detectionResult.images.getClass().getComponentType(), 
+                                 filteredImagesList.size()
+                             );
+                             for (int i = 0; i < filteredImagesList.size(); i++) {
+                                 java.lang.reflect.Array.set(newImages, i, filteredImagesList.get(i));
+                             }
+                             // キャストせずに代入（Object配列としての互換性を利用）
+                             detectionResult.images = (mcv.facepass.types.FacePassImageRet[]) newImages;
+                             
+                             // 全ての顔が消えた場合はメッセージもクリア
+                             if (filteredImagesList.size() == 0) {
+                                 detectionResult.message = new byte[0];
+                             }
+                        }
+                    } else if (validTrackIds.isEmpty()) {
+                        // imagesがnullでもtrackedFacesが空なら後続処理を止める
+                        detectionResult.message = new byte[0];
+                    }
+                }
+
 
                 if (detectionResult == null || detectionResult.trackedFaces.length == 0) {
                     /* 当前帧没有检出人脸 */

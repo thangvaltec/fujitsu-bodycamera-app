@@ -30,7 +30,7 @@ public class FacePassManager {
     /* 人脸识别Group */
     public static String group_name = "facepass";
     public static float LIVENESS_THRESHOLD = 88f; // 原始值: 单目推荐80, 双目推荐88
-    public static int FACE_MIN_THRESHOLD = 100; // 默认值: 100 (1m)
+    public static int FACE_MIN_THRESHOLD = 25; // 初期値は最小(2m)に設定。FacePassActivityの手動フィルタリングで制限を行う。
 
     public static Boolean isLocalGroupExist = false;
     private ProgressDialog progressDialog;
@@ -272,8 +272,8 @@ public class FacePassManager {
                         config.searchThreshold = 75f;
                         config.livenessThreshold = LIVENESS_THRESHOLD;
                         config.faceMinThreshold = FACE_MIN_THRESHOLD;
-                        config.poseThreshold = new FacePassPose(45f, 45f, 45);
-                        config.blurThreshold = 0.7f;
+                        config.poseThreshold = new FacePassPose(90f, 90f, 90f); // 2m対応のため緩和 (45f -> 90f)
+                        config.blurThreshold = 0.98f; // 2m対応のため緩和 (0.7f -> 0.98f)
                         config.lowBrightnessThreshold = 30f;
                         config.highBrightnessThreshold = 210f;
                         config.brightnessSTDThreshold = 80f;
