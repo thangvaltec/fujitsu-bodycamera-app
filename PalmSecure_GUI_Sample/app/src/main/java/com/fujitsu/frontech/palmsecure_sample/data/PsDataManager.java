@@ -449,6 +449,46 @@ public class PsDataManager {
         }
     }
 
+    /**
+     * Retrieves all unique user IDs that have registered vein templates.
+     * This is an optimized alternative to loading all BIR data at once.
+     *
+     * @return ArrayList of registered user IDs.
+     * @throws PsAplException Database error.
+     */
+    public ArrayList<String> getRegisteredUserIDList() throws PsAplException {
+        ArrayList<String> idList = new ArrayList<String>();
+        SQLiteDatabase db = null;
+        Cursor c = null;
+        String sql = "select distinct id from veindata_table where sensortype = ? and datatype = ? order by id;";
+
+        try {
+            db = mDbHelper.getReadableDatabase();
+            c = db.rawQuery(sql, new String[] { mSensorType, mDataType });
+            if (c != null && c.moveToFirst()) {
+                int columnId = c.getColumnIndex("id");
+                do {
+                    idList.add(c.getString(columnId));
+                } while (c.moveToNext());
+            }
+        } catch (SQLiteException e) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "getRegisteredUserIDList", e);
+            }
+            PsAplException pae = new PsAplException(R.string.AplErrorSystemError);
+            throw pae;
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+            if (db != null) {
+                db.close();
+            }
+        }
+
+        return idList;
+    }
+
     public void deleteDBToBioAPI_Data(String Name) throws PsAplException {
 
         SQLiteDatabase db = null;
