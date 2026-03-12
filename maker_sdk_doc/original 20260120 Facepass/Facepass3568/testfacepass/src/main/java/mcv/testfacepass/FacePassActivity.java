@@ -440,155 +440,81 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     continue;
                 }
 
-                /* ★ 手動距離フィルタリング (Identification Distance Setting) 
-                 * SDKの初期化設定(FaceMinThreshold)はシングルトン保持のため、実行時に動的に変更できない場合がある。
-                 * そのため、SDKから返された結果をこちらで手動でフィルタリングし、設定より遠い（小さい）顔を無視する。
-                 */
-                final java.util.Set<Long> validTrackIds = new java.util.HashSet<>();
-                if (detectionResult != null && detectionResult.trackedFaces != null && detectionResult.trackedFaces.length > 0) {
-                    java.util.List<FacePassTrackedFace> filteredFaces = new java.util.ArrayList<>();
+                    /* ★ 手動距離フィルタリング (Identification Distance Setting) 
+                     * SDKの初期化設定(FaceMinThreshold)はシングルトン保持のため、実行時に動的に変更できない場合がある。
+                     * そのため、SDKから返された結果をこちらで手動でフィルタリングし、設定より遠い（小さい）顔を無視する。
+                     * 注意：SDKが返した detectionResult の配列（images, trackedFaces）を直接書き換えると、
+                     * JNI層のメモリ参照が壊れ Liveness 判定が失敗 (-1.0) するため、論理的なフィルタリングのみを行う。
+                     */
+                    java.util.List<FacePassTrackedFace> visibleFaces = new java.util.ArrayList<>();
+                    boolean hasAcceptableFace = false;
                     
-                    for (FacePassTrackedFace face : detectionResult.trackedFaces) {
-                        int faceWidth = (int) (face.rect.right - face.rect.left);
-                        int faceHeight = (int) (face.rect.bottom - face.rect.top);
-                        int faceSize = Math.max(faceWidth, faceHeight);
+                    if (detectionResult == null) continue;
 
-                        Log.d("FaceDistanceDebug",
-                        "trackId: " + face.trackId +
-                        "width=" + faceWidth +
-                        "height=" + faceHeight +
-                        "faceSize=" + faceSize +
-                        "threshold=" + FacePassManager.FACE_MIN_THRESHOLD
-                        );
-                        if (faceSize >= FacePassManager.FACE_MIN_THRESHOLD) {
-                            filteredFaces.add(face);
-                            validTrackIds.add(face.trackId);
+                    if (detectionResult.trackedFaces != null) {
+                        for (FacePassTrackedFace face : detectionResult.trackedFaces) {
+                            int faceWidth = (int) (face.rect.right - face.rect.left);
+                            int faceHeight = (int) (face.rect.bottom - face.rect.top);
+                            int faceSize = Math.max(faceWidth, faceHeight);
 
-                            Log.d("FaceDistanceDebug", "FACE ACCEPTED");
-                        }else {
-                            Log.d("FaceDistanceDebug", "FACE REJECTED (too far)");
+                            boolean isAccepted = faceSize >= FacePassManager.FACE_MIN_THRESHOLD;
+                            if (isAccepted) {
+                                visibleFaces.add(face);
+                                hasAcceptableFace = true;
+                            }
+                            
+                            Log.d("FaceDistanceDebug", String.format("trackId: %d, size: %d, threshold: %d -> %s", 
+                                face.trackId, faceSize, FacePassManager.FACE_MIN_THRESHOLD, isAccepted ? "ACCEPT" : "REJECT"));
                         }
                     }
-                    
-                    // UI表示用リストを更新（これで遠い顔に白い枠が出なくなる）
-                    detectionResult.trackedFaces = filteredFaces.toArray(new FacePassTrackedFace[0]);
-                    
-                    // 処理用（キャプチャ・認証用）リストも更新
-                    if (detectionResult.images != null && detectionResult.images.length > 0) {
-                        java.util.List<Object> filteredImagesList = new java.util.ArrayList<>();
-                        for (int i = 0; i < detectionResult.images.length; i++) {
-                            // images[i]の型名(FacePassImageRet)を直接使わず、インデックスアクセスでtrackIdを確認
-                            if (validTrackIds.contains(detectionResult.images[i].trackId)) {
-                                filteredImagesList.add(detectionResult.images[i]);
+
+                    /* 1. UI表示の制御: 設定距離内の顔のみ枠を描画する */
+                    if (visibleFaces.isEmpty()) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (faceView != null) {
+                                    faceView.clear();
+                                    faceView.invalidate();
+                                }
+                            }
+                        });
+                    } else {
+                        final FacePassTrackedFace[] bufferFaceList = visibleFaces.toArray(new FacePassTrackedFace[0]);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (faceView != null) {
+                                    faceView.setVisibility(View.VISIBLE);
+                                    showFacePassFace(bufferFaceList);
+                                }
+                            }
+                        });
+                    }
+
+                    /* 2. 認識処理の制御: 設定距離内に顔がある場合のみキューへ追加する */
+                    if (hasAcceptableFace && detectionResult.message.length != 0) {
+                        FacePassTrackOptions[] trackOpts = new FacePassTrackOptions[detectionResult.images.length];
+                        for (int i = 0; i < detectionResult.images.length; ++i) {
+                            if (detectionResult.images[i].rcAttr.respiratorType != FacePassRCAttribute.FacePassRespiratorType.NO_RESPIRATOR) {
+                                float searchThreshold = 60f;
+                                trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, searchThreshold, FacePassManager.LIVENESS_THRESHOLD);
+                            } else {
+                                trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, -1f, FacePassManager.LIVENESS_THRESHOLD);
                             }
                         }
                         
-                        if (filteredImagesList.size() < detectionResult.images.length) {
-                             // reflectionを使用して、元の配列と同じ型の新しい配列を作成
-                             Object newImages = java.lang.reflect.Array.newInstance(
-                                 detectionResult.images.getClass().getComponentType(), 
-                                 filteredImagesList.size()
-                             );
-                             for (int i = 0; i < filteredImagesList.size(); i++) {
-                                 java.lang.reflect.Array.set(newImages, i, filteredImagesList.get(i));
-                             }
-                             // キャストせずに代入（Object配列としての互換性を利用）
-                             detectionResult.images = (mcv.facepass.types.FacePassImageRet[]) newImages;
-                             
-                             // 全ての顔が消えた場合はメッセージもクリア
-                             if (filteredImagesList.size() == 0) {
-                                 detectionResult.message = new byte[0];
-                             }
-                        }
-                    } else if (validTrackIds.isEmpty()) {
-                        // imagesがnullでもtrackedFacesが空なら後続処理を止める
-                        detectionResult.message = new byte[0];
-                    }
-                }
-
-
-                if (detectionResult == null || detectionResult.trackedFaces.length == 0) {
-                    /* 当前帧没有检出人脸 */
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            faceView.clear();
-                            faceView.invalidate();
-                        }
-                    });
-                } else {
-                    /* 将识别到的人脸在预览界面中圈出，并在上方显示人脸位置及角度信息 */
-                    final FacePassTrackedFace[] bufferFaceList = detectionResult.trackedFaces;
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (faceView != null) {
-                                faceView.setVisibility(View.VISIBLE);
-                                showFacePassFace(bufferFaceList);
-                            }
-                        }
-                    });
-                }
-
-                if (FacePassManager.SDK_MODE == FacePassManager.FacePassSDKMode.MODE_OFFLINE) {
-//                    Log.d(DEBUG_TAG, "detectionResult.message.length = " + detectionResult.message.length);
-                    /*离线模式，将识别到人脸的，message不为空的result添加到处理队列中*/
-                    if (detectionResult != null) {
-                        /*所有检测到的人脸框的属性信息*/
-                        for (int i = 0; i < detectionResult.trackedFaces.length; ++i) {
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isBlurPassed) {
-                                Log.d(FD_DEBUG_TAG, "BlurScore = " + detectionResult.trackedFaces[i].quality.blur);
-                            }
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isBrightnessPassd) {
-                                Log.d(FD_DEBUG_TAG, "BrightnessScore = " + detectionResult.trackedFaces[i].quality.brightness);
-                                Log.d(FD_DEBUG_TAG, "DeviationScore = " + detectionResult.trackedFaces[i].quality.deviation);
-                            }
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isEdgefacePassed) {
-                                Log.d(FD_DEBUG_TAG, "EdgefacePassedScore = " + detectionResult.trackedFaces[i].quality.edgefaceComp);
-                            }
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isYawPassed ||
-                                    !detectionResult.trackedFaces[i].quality.facePassQualityCheck.isPitchPassed ||
-                                    !detectionResult.trackedFaces[i].quality.facePassQualityCheck.isRollPassed) {
-                                Log.d(FD_DEBUG_TAG, "YawScore = " + detectionResult.trackedFaces[i].quality.pose.yaw);
-                                Log.d(FD_DEBUG_TAG, "PitchScore = " + detectionResult.trackedFaces[i].quality.pose.pitch);
-                                Log.d(FD_DEBUG_TAG, "RollScore = " + detectionResult.trackedFaces[i].quality.pose.roll);
-                            }
-                        }
-                        Log.d(DEBUG_TAG, "--------------------------------------------------------------------------------------------------------------------------------------------------");
-                        if (detectionResult.message.length != 0) {
-                            /*送识别的人脸框的属性信息*/
-                            FacePassTrackOptions[] trackOpts = new FacePassTrackOptions[detectionResult.images.length];
-                            for (int i = 0; i < detectionResult.images.length; ++i) {
-                                if (detectionResult.images[i].rcAttr.respiratorType != FacePassRCAttribute.FacePassRespiratorType.NO_RESPIRATOR) {
-                                    float searchThreshold = 60f;
-                                    float livenessThreshold = FacePassManager.LIVENESS_THRESHOLD; // Use dynamic setting
-                                    trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, searchThreshold, livenessThreshold);
-                                } else {
-                                    // Use global setting for non-mask case as well to ensure consistency
-                                    trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, -1f, FacePassManager.LIVENESS_THRESHOLD);
-                                }
-                                Log.d(DEBUG_TAG, String.format("rc attribute in FacePassImage, hairType: 0x%x beardType: 0x%x hatType: 0x%x respiratorType: 0x%x glassesType: 0x%x skinColorType: 0x%x",
-                                        detectionResult.images[i].rcAttr.hairType.ordinal(),
-                                        detectionResult.images[i].rcAttr.beardType.ordinal(),
-                                        detectionResult.images[i].rcAttr.hatType.ordinal(),
-                                        detectionResult.images[i].rcAttr.respiratorType.ordinal(),
-                                        detectionResult.images[i].rcAttr.glassesType.ordinal(),
-                                        detectionResult.images[i].rcAttr.skinColorType.ordinal()));
-                            }
-                            Log.d(DEBUG_TAG, "mRecognizeDataQueue.offer(mRecData);");
-                            // Pass the NV21 data for potential capture
-                            RecognizeData mRecData = new RecognizeData(detectionResult.message, trackOpts, framePair.first.nv21Data, framePair.first.width, framePair.first.height, startTime);
-                            mDetectResultQueue.offer(mRecData);
-                            Log.d(DEBUG_TAG, " startTime " + startTime);
+                        RecognizeData mRecData = new RecognizeData(detectionResult.message, trackOpts, framePair.first.nv21Data, framePair.first.width, framePair.first.height, startTime);
+                        mDetectResultQueue.offer(mRecData);
+                        Log.d("FaceDistanceDebug", "Frame offered to queue (Face within distance)");
+                    } else {
+                        // 距離外の場合はキューに追加せずスキップ
+                        if (detectionResult.trackedFaces != null && detectionResult.trackedFaces.length > 0) {
+                           Log.d("FaceDistanceDebug", "Frame rejected (Face too far)");
                         }
                     }
-                }
                 long endTime = System.currentTimeMillis(); //结束时间
                 long runTime = endTime - startTime;
-                if (detectionResult == null) {
-                    Log.d(DEBUG_TAG, "detectionResult == null");
-                    continue;
-                }
                 for (int i = 0; i < detectionResult.trackedFaces.length; ++i) {
                     Log.i(DEBUG_TAG, "rect[" + i + "] = (" + detectionResult.trackedFaces[i].rect.left + ", " + detectionResult.trackedFaces[i].rect.top + ", " + detectionResult.trackedFaces[i].rect.right + ", " + detectionResult.trackedFaces[i].rect.bottom);
                 }
@@ -817,23 +743,23 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 //                            }
 //                        }
                     }
-                    } // end if (mFacePassHandler != null && isLocalGroupExist)
-                } catch (InterruptedException e) {
-                    Log.e(DEBUG_TAG, "RecognizeThread Interrupted", e);
-                } catch (FacePassException e) {
-                    Log.e(DEBUG_TAG, "FacePassException in RecognizeThread", e);
-                } catch (Exception e) {
-                    Log.e(DEBUG_TAG, "Unexpected error in RecognizeThread", e);
                 }
+            } catch (InterruptedException e) {
+                Log.e(DEBUG_TAG, "RecognizeThread Interrupted", e);
+            } catch (FacePassException e) {
+                Log.e(DEBUG_TAG, "FacePassException in RecognizeThread", e);
+            } catch (Exception e) {
+                Log.e(DEBUG_TAG, "Unexpected error in RecognizeThread", e);
             }
         }
-
-        @Override
-        public void interrupt() {
-            isInterrupt = true;
-            super.interrupt();
-        }
     }
+
+    @Override
+    public void interrupt() {
+        isInterrupt = true;
+        super.interrupt();
+    }
+}
 
     private void showRecognizeResult(final long trackId, final float searchScore, final float livenessScore, final boolean isRecognizeOK) {
         mAndroidHandler.post(new Runnable() {
