@@ -31,12 +31,22 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+                【自動起動設定】PalmSecureセンサー（USBデバイス）接続時にアプリを自動起動する設定です。
+                端末再起動後にUSBセンサーが再認識されると、このアプリが自動的に起動します。
+
+                ・自動起動を【有効】にする場合 → 以下のコメントを解除してください
+                ・自動起動を【無効】にする場合 → 以下をコメントアウトのまま（現在の状態）にしてください
+            -->
+            <!--
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>
             <meta-data
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter"/>
+            -->
         </activity>
     </application>
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />

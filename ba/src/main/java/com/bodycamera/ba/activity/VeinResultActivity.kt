@@ -25,6 +25,8 @@ class VeinResultActivity : AppCompatActivity() {
         const val EXTRA_NEW_NAME = "extra_new_name"
         const val EXTRA_NEW_ID = "extra_new_id"
         const val EXTRA_CANDIDATE_LIST = "candidate_list"
+        const val EXTRA_NOT_REGISTERED = "not_registered"
+        const val EXTRA_NO_VEIN_DATA = "no_vein_data"
     }
 
     // UI
@@ -41,6 +43,7 @@ class VeinResultActivity : AppCompatActivity() {
     // 新しいUIフィールド
     private lateinit var tvMessage: TextView
     private lateinit var tvSimilarity: TextView
+    private lateinit var tvUnregisteredMessage: TextView
 
     // Flow1 / Flow2 / Flow3
     private var currentAuthMode: String = ""
@@ -79,6 +82,7 @@ class VeinResultActivity : AppCompatActivity() {
 
         tvMessage = findViewById(R.id.tvMessage)
         tvSimilarity = findViewById(R.id.tvSimilarity)
+        tvUnregisteredMessage = findViewById(R.id.tvUnregisteredMessage)
     }
 
     private fun handleIntent() {
@@ -153,6 +157,34 @@ class VeinResultActivity : AppCompatActivity() {
 
         tvNameLabel.visibility = View.GONE
         tvName.visibility = View.GONE
+
+        // 静脈データが1件も登録されていない場合（最優先で表示）
+        val noVeinData = intent.getBooleanExtra(EXTRA_NO_VEIN_DATA, false)
+        if (noVeinData) {
+            tvUnregisteredMessage.text = "静脈情報が1件も登録されていません。\n静脈認証の登録を行ってください。"
+            tvUnregisteredMessage.visibility = View.VISIBLE
+            Thread { uploadAuthLog(isSuccess, veinId, veinResult) }.start()
+            showButtons(isSuccess)
+            return
+        }
+
+        // 未登録メッセージ表示
+        val notRegistered = intent.getBooleanExtra(EXTRA_NOT_REGISTERED, false)
+        if (!isSuccess && notRegistered) {
+            val msg = when (currentAuthMode) {
+                "Vein" -> "まだ登録されてない静脈情報です。\n静脈認証アプリで登録を行ってください。"
+                "FaceAndVein" -> "顔と一致している静脈IDを確認できませんでした。\n静脈認証アプリで登録を行ってください。"
+                else -> null
+            }
+            if (msg != null) {
+                tvUnregisteredMessage.text = msg
+                tvUnregisteredMessage.visibility = View.VISIBLE
+            } else {
+                tvUnregisteredMessage.visibility = View.GONE
+            }
+        } else {
+            tvUnregisteredMessage.visibility = View.GONE
+        }
 
         // ログ送信 (Vein / FaceAndVein) - バックグラウンドスレッドで実行してUI描画をブロックしない
         Thread { uploadAuthLog(isSuccess, veinId, veinResult) }.start()

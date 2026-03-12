@@ -301,7 +301,7 @@ class TopActivity : AppCompatActivity() {
     private fun launchFaceRecognition() {
         Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
-        
+
         // Read use_topk setting from SharedPreferences — allows dynamic switching via Settings
         val isFlow3 = currentAuthMode() == "FaceAndVein"
         val shouldUseTopK = if (isFlow3) {
@@ -309,7 +309,7 @@ class TopActivity : AppCompatActivity() {
                 .getBoolean(SettingsActivity.KEY_USE_TOPK, false)
         } else false
         Log.d(TAG, "Launch Policy: Flow3=$isFlow3 → UseTopK=$shouldUseTopK")
-        
+
         intent.putExtra("should_use_topk", shouldUseTopK)
         
         // Flow3のチェーン（顔→静脈）を実現するため、結果を待ちます
@@ -494,8 +494,10 @@ class TopActivity : AppCompatActivity() {
                 resultStr = resultStr ?: "NG" // どちらもなければNG
 
                 val userIdStr = data.getStringExtra("user_id") ?: data.getStringExtra("vein_id")
+                val notRegistered = data.getBooleanExtra("not_registered", false)
+                val noVeinData = data.getBooleanExtra("no_vein_data", false)
 
-                Log.d(TAG, "PalmSecure Result: $resultStr, ID: $userIdStr")
+                Log.d(TAG, "PalmSecure Result: $resultStr, ID: $userIdStr, NotRegistered: $notRegistered, NoVeinData: $noVeinData")
 
                 // 結果画面へ遷移
                 val intent =
@@ -506,6 +508,8 @@ class TopActivity : AppCompatActivity() {
                         )
                         putExtra(VeinResultActivity.EXTRA_VEIN_ID, userIdStr)
                         putExtra(VeinResultActivity.EXTRA_AUTH_MODE, currentAuthMode())
+                        putExtra(VeinResultActivity.EXTRA_NOT_REGISTERED, notRegistered)
+                        putExtra(VeinResultActivity.EXTRA_NO_VEIN_DATA, noVeinData)
                     }
                 startActivity(intent)
                 overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示

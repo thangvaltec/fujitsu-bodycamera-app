@@ -11,11 +11,15 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.bodycamera.ba.faceauth.FaceCaptureStrategy
 import com.bodycamera.ba.faceauth.MakerAppCaptureStrategy
 import com.bodycamera.ba.network.FaceRecognitionApi
 import com.bodycamera.ba.network.model.FaceAuthResponse
 import com.google.gson.Gson
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 
@@ -61,7 +65,8 @@ class NewFaceAuthActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
         mServerUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "") ?: ""
         mDeviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
-        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}")
+        val livenessThreshold = prefs.getFloat(SettingsActivity.KEY_LIVENESS_THRESHOLD, 88.0f)
+        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}, Liveness=$livenessThreshold")
 
         if (checkPermission()) {
             startCaptureSafe()
@@ -199,26 +204,22 @@ class NewFaceAuthActivity : AppCompatActivity() {
 
     /**
      * 画像ファイルをAPIに送信して結果を処理します。
-     * Broadcast Architecture対応版
+     * Broadcast Architecture対応版 (Coroutine版)
      */
     private fun processFaceImage(file: File) {
-        Thread {
+        lifecycleScope.launch {
             try {
                 // 1. Maker App側で1024pxリサイズ・quality80処理済みのため、再圧縮は不要
                 // 再圧縮するとファイルサイズが逆に増大する（例: 69KB → 176KB）ため直接使用する
                 Log.d(TAG, "★ API処理 開始 - ファイル: ${file.absolutePath} (${file.length()/1024}KB)")
                 val compressedFile = file  // 再圧縮なし、元ファイルをそのまま使用
 
-                mainHandler.post {
-                    // 必要に応じてUI更新（プログレス表示等）
-                }
-
                 // 2. 設定値の取得 (Pre-fetch済みを使用)
                 if (mServerUrl.isEmpty() || mDeviceId.isEmpty()) {
                     val msg = "設定画面でURLとデバイスIDを設定してください"
                     Log.w(TAG, "★ API処理 設定不足: serverUrl=$mServerUrl, deviceId=$mDeviceId")
-                    mainHandler.post { broadcastAuthResult(false, msg) }
-                    return@Thread
+                    broadcastAuthResult(false, msg)
+                    return@launch
                 }
 
                 val policeId = "null"
@@ -226,16 +227,18 @@ class NewFaceAuthActivity : AppCompatActivity() {
                 Log.d(TAG, "★ API送信 デバイスID: $mDeviceId | policeId: $policeId")
                 Log.d(TAG, "★ API送信 送信ファイル: ${compressedFile.name} (${compressedFile.length()/1024}KB)")
 
-                // 3. APIリクエスト送信
+                // 3. APIリクエスト送信 (IOスレッドで実行)
                 val startTime = System.currentTimeMillis()
-                val responseJson = FaceRecognitionApi.sendFaceRecognition(
-                        compressedFile, mDeviceId, policeId, mServerUrl
-                )
+                val responseJson = withContext(Dispatchers.IO) {
+                    FaceRecognitionApi.sendFaceRecognition(
+                            compressedFile, mDeviceId, policeId, mServerUrl
+                    )
+                }
                 val elapsed = System.currentTimeMillis() - startTime
                 Log.d(TAG, "★ API応答 応答時間: ${elapsed}ms")
                 Log.d(TAG, "★ API応答 レスポンスJSON: $responseJson")
 
-                mainHandler.post {
+                // 4. 結果処理 (メインスレッド)
                     if (responseJson != null) {
                         try {
                             val result = gson.fromJson(responseJson, FaceAuthResponse::class.java)
@@ -267,12 +270,10 @@ class NewFaceAuthActivity : AppCompatActivity() {
                     } else {
                         Log.e(TAG, "★ API応答 失敗: レスポンスが空(null)です。NW環境 hoặc Server link を確認してください。")
                         broadcastAuthResult(false, "ネットワークエラー")
-                    }
+                }
 
-                    }
-
-                    // 4. 一時圧縮ファイルの削除
-                    try {
+                // 5. 一時圧縮ファイルの削除
+                try {
                         // 圧縮ファイルがあれば削除
                         if (compressedFile.absolutePath != file.absolutePath && compressedFile.exists()) {
                             compressedFile.delete()
@@ -290,9 +291,9 @@ class NewFaceAuthActivity : AppCompatActivity() {
                     }
             } catch (e: Exception) {
                 Log.e(TAG, "★ API通信例外が発生しました: ${e.message}", e)
-                mainHandler.post { broadcastAuthResult(false, "NW Error: ${e.message}") }
+                broadcastAuthResult(false, "NW Error: ${e.message}")
             }
-        }.start()
+        }
     }
 
     /**

@@ -65,6 +65,15 @@
             android:textSize="30sp"
             android:textColorHint="#4B5563" />
 
+        <!-- Liveness Threshold -->
+        <EditText
+            android:id="@+id/etLivenessThreshold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="88"
+            android:inputType="numberDecimal"
+            android:layout_marginTop="10dp"/>
+
         　　　　<!-- TopK Setting -->
         <CheckBox
             android:id="@+id/cbUseTopK"
