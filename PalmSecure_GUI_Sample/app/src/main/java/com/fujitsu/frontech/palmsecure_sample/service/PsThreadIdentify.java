@@ -8,7 +8,6 @@ package com.fujitsu.frontech.palmsecure_sample.service;
 
 import android.util.Log;
 
-import com.fujitsu.frontech.palmsecure.JAVA_BioAPI_BIR_ARRAY_POPULATION;
 import com.fujitsu.frontech.palmsecure.JAVA_BioAPI_CANDIDATE;
 import com.fujitsu.frontech.palmsecure.JAVA_BioAPI_IDENTIFY_POPULATION;
 import com.fujitsu.frontech.palmsecure.JAVA_sint32;
@@ -20,9 +19,20 @@ import com.fujitsu.frontech.palmsecure_sample.data.PsDataManager;
 import com.fujitsu.frontech.palmsecure_sample.data.PsThreadResult;
 import com.fujitsu.frontech.palmsecure_sample.exception.PsAplException;
 import com.fujitsu.frontech.palmsecure_gui_sample.BuildConfig;
+import com.fujitsu.frontech.palmsecure_gui_sample.R;
+
+import java.util.ArrayList;
 
 /**
- * Thread that performs identification (scan-first) against the stored population.
+ * Thread that performs 1:N identification against all registered templates.
+ *
+ * Uses JAVA_BioAPI_Identify (same as PsThreadVerify batch mode) which handles
+ * capture + match internally in one SDK call.
+ *
+ * Result semantics:
+ *   - SDK error (capture failed, no hand placed, etc.) → result = FUNCTION_FAILED, authenticated = false
+ *   - Scanned OK but no match found after all retries  → result = OK, authenticated = false
+ *   - Match found                                      → result = OK, authenticated = true, userId set
  */
 public class PsThreadIdentify extends PsThreadBase {
 
@@ -38,128 +48,135 @@ public class PsThreadIdentify extends PsThreadBase {
     public void run() {
         PsThreadResult stResult = new PsThreadResult();
         stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
+        stResult.authenticated = false;
 
         try {
-            // Delay 200ms for sensor stability
-            try { Thread.sleep(200); } catch (InterruptedException e) {}
-
+            // ── Step 1: Load all registered templates once ────────────────────
             PsDataManager dm = new PsDataManager(service.getActivity(),
                     service.getUsingSensorType(),
                     service.getUsingDataType());
-                    
-            java.util.ArrayList<String> allIds = dm.getRegisteredUserIDList();
-            if (allIds == null || allIds.isEmpty()) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "No registered IDs found in DB");
+
+            ArrayList<String> nameList = new ArrayList<>();
+            JAVA_BioAPI_IDENTIFY_POPULATION population;
+            try {
+                population = dm.convertDBToBioAPI_Data_All(nameList);
+            } catch (PalmSecureException e) {
+                stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
+                stResult.pseErrNumber = e.ErrNumber;
+                Ps_Sample_Apl_Java_NotifyResult_Identify(stResult);
+                return;
+            }
+
+            if (nameList.isEmpty()) {
+                if (BuildConfig.DEBUG) Log.w(TAG, "No registered templates in DB");
                 stResult.result = PalmSecureConstant.JAVA_BioAPI_OK;
                 stResult.authenticated = false;
                 Ps_Sample_Apl_Java_NotifyResult_Identify(stResult);
                 return;
             }
+            if (BuildConfig.DEBUG) Log.d(TAG, "Total templates loaded: " + nameList.size());
 
-            // The SDK consumes ~40MB per template during Identify. 
-            // Chunked Identify prevents OOM by limiting memory pressure.
-            final int CHUNK_SIZE = 10; 
-            boolean matchFound = false;
+            // ── Step 2: Retry loop ────────────────────────────────────────────
+            for (int attempt = 0; attempt <= this.numberOfRetry; attempt++) {
+                if (service.cancelFlg) break;
+                stResult.retryCnt = attempt;
 
-            for (int chunkStart = 0; chunkStart < allIds.size(); chunkStart += CHUNK_SIZE) {
-                if (this.service.cancelFlg) break;
-
-                int chunkEnd = Math.min(chunkStart + CHUNK_SIZE, allIds.size());
-                java.util.ArrayList<String> chunkIds = new java.util.ArrayList<>(allIds.subList(chunkStart, chunkEnd));
-                
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "Identifying chunk: " + chunkStart + " to " + (chunkEnd-1));
+                if (attempt > 0) {
+                    Ps_Sample_Apl_Java_NotifyGuidance(R.string.RetryTransaction, false);
+                    int waited = 0;
+                    while (waited < this.sleepTime && !service.cancelFlg) {
+                        try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+                        waited += 100;
+                    }
+                    if (service.cancelFlg) break;
                 }
 
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "Searching next chunk: " + chunkStart + " to " + (chunkEnd-1));
-                }
+                Ps_Sample_Apl_Java_NotifyWorkMessage(R.string.WorkVerify);
 
-                JAVA_BioAPI_IDENTIFY_POPULATION population = dm.convertDBToBioAPI_Data_All(chunkIds);
-
-                // Set up identify parameters
-                JAVA_sint32 maxFRRRequested = new JAVA_sint32();
-                maxFRRRequested.value = PalmSecureConstant.JAVA_PvAPI_MATCHING_LEVEL_NORMAL;
-                JAVA_sint32 farRequested = new JAVA_sint32();
-                farRequested.value = PalmSecureConstant.JAVA_BioAPI_FALSE;
+                JAVA_sint32 maxFRR = new JAVA_sint32();
+                maxFRR.value = PalmSecureConstant.JAVA_PvAPI_MATCHING_LEVEL_NORMAL;
+                JAVA_sint32 far = new JAVA_sint32();
+                far.value = PalmSecureConstant.JAVA_BioAPI_FALSE;
                 JAVA_uint32 farPrecedence = new JAVA_uint32();
                 farPrecedence.value = PalmSecureConstant.JAVA_BioAPI_FALSE;
-                JAVA_uint32 totalNumberOfTemplates = new JAVA_uint32();
-                totalNumberOfTemplates.value = chunkIds.size();
-                JAVA_uint32 maxNumberOfResults = new JAVA_uint32();
-                maxNumberOfResults.value = 1;
+                JAVA_uint32 totalTemplates = new JAVA_uint32();
+                totalTemplates.value = nameList.size();
+                JAVA_uint32 maxResults = new JAVA_uint32();
+                maxResults.value = 1;
                 JAVA_uint32 numberReturned = new JAVA_uint32();
                 JAVA_BioAPI_CANDIDATE[] candidates = new JAVA_BioAPI_CANDIDATE[1];
                 candidates[0] = new JAVA_BioAPI_CANDIDATE();
                 JAVA_sint32 timeout = new JAVA_sint32();
-                timeout.value = 0;
                 JAVA_sint32 templateUpdate = new JAVA_sint32();
-                templateUpdate.value = PalmSecureConstant.JAVA_BioAPI_FALSE;
 
+                long identifyResult;
                 try {
-                    stResult.result = palmsecureIf.JAVA_BioAPI_Identify(
-                        moduleHandle, maxFRRRequested, farRequested, farPrecedence,
-                        population, totalNumberOfTemplates, maxNumberOfResults,
-                        numberReturned, candidates, timeout, templateUpdate
-                    );
-
-                    if (stResult.result == PalmSecureConstant.JAVA_BioAPI_OK && 
-                        numberReturned.value > 0 && candidates[0] != null) {
-                        
-                        int matchedIndex = -1;
-                        try {
-                            // Extract index using reflection (BIRInArray field)
-                            java.lang.reflect.Field field = candidates[0].getClass().getField("BIRInArray");
-                            matchedIndex = (int) field.getLong(candidates[0]);
-                        } catch (Exception e) {
-                            // Fallback scan for index fields
-                            try {
-                                for (java.lang.reflect.Field f : candidates[0].getClass().getFields()) {
-                                    if (f.getName().toLowerCase().contains("index") || f.getName().toLowerCase().contains("bir")) {
-                                        Object val = f.get(candidates[0]);
-                                        if (val instanceof Number) {
-                                            matchedIndex = ((Number)val).intValue();
-                                            break;
-                                        }
-                                    }
-                                }
-                            } catch (Exception ignored) {}
-                        }
-
-                        if (matchedIndex >= 0 && matchedIndex < chunkIds.size()) {
-                            String matchedId = chunkIds.get(matchedIndex);
-                            stResult.authenticated = true;
-                            stResult.userId = new java.util.ArrayList<String>();
-                            stResult.userId.add(matchedId);
-                            matchFound = true;
-                            if (BuildConfig.DEBUG) Log.d(TAG, "Match found in chunk: " + matchedId);
-                            break; 
-                        }
-                    }
+                    identifyResult = palmsecureIf.JAVA_BioAPI_Identify(
+                            moduleHandle, maxFRR, far, farPrecedence,
+                            population, totalTemplates, maxResults,
+                            numberReturned, candidates, timeout, templateUpdate);
                 } catch (PalmSecureException e) {
-                    if (BuildConfig.DEBUG) Log.e(TAG, "Identify API call failed", e);
+                    if (BuildConfig.DEBUG) Log.e(TAG, "Identify SDK error attempt=" + attempt, e);
                     stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
                     stResult.pseErrNumber = e.ErrNumber;
-                    break; 
+                    break; // Hard SDK error — stop retrying
                 }
-                
-                if (stResult.result != PalmSecureConstant.JAVA_BioAPI_OK) break;
+
+                stResult.result = identifyResult;
+                if (BuildConfig.DEBUG) Log.d(TAG, "Identify attempt=" + attempt
+                        + " result=" + identifyResult + " returned=" + numberReturned.value);
+
+                if (identifyResult != PalmSecureConstant.JAVA_BioAPI_OK) {
+                    // Capture or SDK failure — stop retrying, keep error result
+                    break;
+                }
+
+                if (numberReturned.value > 0 && candidates[0] != null) {
+                    int matchedIndex = extractMatchedIndex(candidates[0]);
+                    if (matchedIndex >= 0 && matchedIndex < nameList.size()) {
+                        stResult.authenticated = true;
+                        stResult.userId = new ArrayList<>();
+                        stResult.userId.add(nameList.get(matchedIndex));
+                        if (BuildConfig.DEBUG) Log.d(TAG, "Match found: ID=" + nameList.get(matchedIndex));
+                        break;
+                    }
+                }
+                // OK but no match → retry
             }
 
-            if (!matchFound) {
-                stResult.authenticated = false;
-            }
-
-        } catch (PsAplException | PalmSecureException e) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Identify failed", e);
+        } catch (PsAplException e) {
+            if (BuildConfig.DEBUG) Log.e(TAG, "Identify error", e);
             stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
             stResult.authenticated = false;
         } catch (Exception e) {
-            if (BuildConfig.DEBUG) Log.e(TAG, "Identify run error", e);
+            if (BuildConfig.DEBUG) Log.e(TAG, "Identify unexpected error", e);
             stResult.result = PalmSecureConstant.JAVA_BioAPI_ERRCODE_FUNCTION_FAILED;
             stResult.authenticated = false;
         }
 
         Ps_Sample_Apl_Java_NotifyResult_Identify(stResult);
+    }
+
+    /**
+     * Extracts the matched index from a JAVA_BioAPI_CANDIDATE object.
+     */
+    private int extractMatchedIndex(JAVA_BioAPI_CANDIDATE candidate) {
+        try {
+            java.lang.reflect.Field field = candidate.getClass().getField("BIRInArray");
+            return (int) field.getLong(candidate);
+        } catch (Exception ignored) {}
+
+        try {
+            for (java.lang.reflect.Field f : candidate.getClass().getFields()) {
+                Object val = f.get(candidate);
+                if (val instanceof Number) {
+                    int idx = ((Number) val).intValue();
+                    if (BuildConfig.DEBUG) Log.w(TAG, "extractMatchedIndex fallback: field=" + f.getName() + " val=" + idx);
+                    return idx;
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return -1;
     }
 }
