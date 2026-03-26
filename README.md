@@ -1,4 +1,4 @@
-#  (Project Overview)
+#  Project Overview
 
 ## 1. (3-App Architecture)
 
@@ -6,15 +6,15 @@
 
 ### ① 認証デモアプリ (Main App)
 *   **パス**: `ba/`
-*   **役割**: システム全体の司令塔です。ユーザーインターフェース（TopActivity）、設定管理（Settings）、および最終的な認証結果を表示（VeinResultActivity）します。
+*   **役割**: ユーザーインターフェース（TopActivity）、設定管理（Settings）、および最終的な認証結果を表示（VeinResultActivity）します。
 *   **特徴**: 
     *   `TopActivity` から認証フローを開始します。
-    *   Faceのみ、Veinのみ、または「Face + Vein」のハイブリッド認証を制御します。
-    *   ローカルサーバーおよびクラウドサーバーとの通信も担当します。
+    *   Faceのみ、Veinのみ、または「Face + Vein」認証を制御します。
+    *   ローカルサーバーおよびクラウドサーバーとの選択する。
 
 ### ② 顔認証 (FacePass)
 *   **パス**: `maker_sdk_doc\original 20260120 Facepass\Facepass3568`
-*   **役割**: 顔認識および生体検知（Liveness Detection）を担当します。
+*   **役割**: 顔認識および生体検知
 *   **特徴**:
     *   FacePass SDK を使用しています。
     *   メインアプリからのインテントを受け取り、カメラを起動して顔を照合します。
