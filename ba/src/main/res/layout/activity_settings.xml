@@ -145,16 +145,221 @@
             android:textSize="20sp"
             android:textColorHint="#4B5563" />
 
-        <!-- TopK Setting -->
-        <CheckBox
-            android:id="@+id/cbUseTopK"
+        <!-- Auto Authentication Method -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="自動認証設定"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
+        <GridLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="32dp"
-            android:text="Flow3 (Face+Vein) uses TopK"
-            android:textColor="#FFFFFF"
-            android:buttonTint="#0EA5E9"
-            android:textSize="20sp"/>
+            android:columnCount="2"
+            android:layout_marginBottom="8dp">
+
+            <RadioButton
+                android:id="@+id/rbAutoNone"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="8dp"
+                android:text="無効"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp"
+                android:checked="true"/>
+
+            <RadioButton
+                android:id="@+id/rbAutoFace"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="顔認証"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp" />
+
+            <RadioButton
+                android:id="@+id/rbAutoVein"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:text="静脈認証"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp" />
+
+            <RadioButton
+                android:id="@+id/rbAutoBoth"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="顔と静脈認証"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp" />
+        </GridLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:text="※設定すると認証結果の表示後、自動で次の認証を開始します。変更はメイン画面に戻ってからデバイス設定画面で行ってください。"
+            android:textColor="#9CA3AF"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+        <!-- Face Auth Method -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="顔認証方法"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
+        <RadioGroup
+            android:id="@+id/rgFaceAuthMethod"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            <RadioButton
+                android:id="@+id/rbFaceCloud"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="24dp"
+                android:text="クラウドサーバ認証"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp"
+                android:checked="true"/>
+            <RadioButton
+                android:id="@+id/rbFaceLocal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ローカルサーバ認証"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp" />
+        </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:text="※ローカルサーバ認証を利用する場合、あらかじめ「顔認証」アプリで顔登録を行う必要があります。"
+            android:textColor="#9CA3AF"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+        <!-- Face and Vein Auth Method -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="顔と静脈認証方法"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
+        <RadioGroup
+            android:id="@+id/rgFaceVeinAuthMethod"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+            <RadioButton
+                android:id="@+id/rbFaceVeinCloud"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="24dp"
+                android:text="クラウドサーバ認証"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp"
+                android:checked="true"/>
+            <RadioButton
+                android:id="@+id/rbFaceVeinLocal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ローカルサーバ認証"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp" />
+        </RadioGroup>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:text="※ローカルサーバ認証を利用する場合、あらかじめ「顔認証」アプリで顔登録を行う必要があります。"
+            android:textColor="#9CA3AF"
+            android:textSize="12sp"
+            android:lineSpacingExtra="4dp" />
+
+        <!-- Top-K & Recognition Threshold -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
+            android:layout_marginBottom="32dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginEnd="8dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="Top-Kの人数"
+                    android:textColor="#9CA3AF"
+                    android:textSize="20sp" />
+                <EditText
+                    android:id="@+id/etTopK"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="#1F2937"
+                    android:hint="1"
+                    android:inputType="number"
+                    android:padding="12dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    android:textColorHint="#4B5563" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="8dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:text="認識比較閾値"
+                    android:textColor="#9CA3AF"
+                    android:textSize="20sp" />
+                <EditText
+                    android:id="@+id/etRecognitionThreshold"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="#1F2937"
+                    android:hint="60.0"
+                    android:inputType="numberDecimal"
+                    android:padding="12dp"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    android:textColorHint="#4B5563" />
+            </LinearLayout>
+
+        </LinearLayout>
 
         <!-- Save Button -->
         <Button

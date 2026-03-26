@@ -166,29 +166,52 @@ class NewFaceAuthActivity : AppCompatActivity() {
             } else if (intent?.action == ACTION_CANDIDATE_LIST) {
                 val candidates = intent.getStringArrayListExtra("candidate_list")
                 if (candidates != null && candidates.isNotEmpty()) {
-                    Log.d(TAG, "★受信ACTION_CANDIDATE_LIST: count=${candidates.size}")
-                    handleCandidateList(candidates)
+                    // MakerAppから認証結果の氏名とIDを取得します。
+                    // 複数のキー（result_name/name, result_id/id）をチェックして柔軟に対応します。
+                    val resultName = intent.getStringExtra("result_name") ?: intent.getStringExtra("name")
+                    val resultId = intent.getStringExtra("result_id") ?: intent.getStringExtra("id")
+                    
+                    Log.d(TAG, "★受信ACTION_CANDIDATE_LIST: count=${candidates.size}, name=$resultName, id=$resultId")
+                    handleCandidateList(candidates, resultName, resultId)
                 }
             }
         }
     }
 
     /**
-     * TopK候補リストを受け取った場合の処理
+     * MakerApp（ローカルサーバ）からのTopK候補リストを受け取った場合の処理。
+     * 氏名（resultName）とID（resultId）が提供された場合はそれを優先して結果画面に表示します。
+     *
+     * @param candidates  認証候補者IDのリスト（静脈認証の絞り込みなどに使用）
+     * @param resultName  MakerAppが特定した認証成功者の氏名（ローカルモード時に設定される）
+     * @param resultId    MakerAppが特定した認証成功者のID（ローカルモード時に設定される）
      */
-    private fun handleCandidateList(candidates: ArrayList<String>) {
+    private fun handleCandidateList(candidates: ArrayList<String>, resultName: String?, resultId: String?) {
         Log.d(TAG, "═══════════════════════════════════════════")
         Log.d(TAG, "★ handleCandidateList: ${candidates.size} candidates received")
+        Log.d(TAG, "★ resultName=$resultName, resultId=$resultId")
         candidates.forEachIndexed { i, token ->
             Log.d(TAG, "  → Received[$i]: $token")
         }
         Log.d(TAG, "★ Setting RESULT_OK with candidate_list → Finishing NewFaceAuthActivity...")
         Log.d(TAG, "═══════════════════════════════════════════")
-        
+
         val data = Intent().apply {
             putStringArrayListExtra("candidate_list", candidates)
             putExtra("ResultStatus", 2)
-            putExtra("ResultMessage", "TopK Candidates Found")
+
+            // 氏名とIDが取得できた場合は結果画面に表示させるためのキーをセットします。
+            // これにより VeinResultActivity の handleNewFaceAuthIntent が正しい情報を表示できます。
+            if (!resultName.isNullOrEmpty()) {
+                putExtra("ResultName", resultName)
+            }
+            if (!resultId.isNullOrEmpty()) {
+                putExtra("ResultID", resultId)
+            }
+
+            // メッセージはローカルモードの認証成功を示す適切なテキストに変更します。
+            val message = if (!resultName.isNullOrEmpty()) "顔認証成功" else "認証完了（候補リスト取得済み）"
+            putExtra("ResultMessage", message)
         }
         setResult(RESULT_OK, data)
         finish()

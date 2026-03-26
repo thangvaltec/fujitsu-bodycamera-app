@@ -250,6 +250,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
 
     private boolean mUseTopKMode = false; // Flag to enable TopK flow
+    private int mTopKCount = 1;
+    private float mRecognizeThreshold = 60.0f;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -264,13 +266,16 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mDeviceId = intent.getStringExtra("device_id");
             mPoliceId = intent.getStringExtra("police_id");
             mUseTopKMode = intent.getBooleanExtra("should_use_topk", false);
+            mTopKCount = intent.getIntExtra("top_k_count", 1);
+            mRecognizeThreshold = intent.getFloatExtra("recognition_threshold", 60.0f);
+            
             float threshold = intent.getFloatExtra("liveness_threshold", 88.0f);
             FacePassManager.LIVENESS_THRESHOLD = threshold; // Apply global setting
             
             int faceMinThreshold = intent.getIntExtra("face_min_threshold", 100);
             FacePassManager.FACE_MIN_THRESHOLD = faceMinThreshold;
             
-            Log.d(DEBUG_TAG, "★ パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThreshold=" + threshold + ", FaceMinThreshold=" + faceMinThreshold);
+            Log.d(DEBUG_TAG, "★ パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThresh=" + threshold + ", FaceMinThresh=" + faceMinThreshold + ", TopKCount=" + mTopKCount + ", RecogThresh=" + mRecognizeThreshold);
         }
 
         /* 初始化界面 */
@@ -627,8 +632,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                 // MODE: TopK (Flow 3 with "Use TopK" enabled)
                                 Log.d(DEBUG_TAG, "★ [TopK Mode] Starting Local Recognition...");
                                 
-                                int topK = 5;
-                                float scoreFilter = 60.0f;
+                                int topK = mTopKCount;
+                                float scoreFilter = mRecognizeThreshold;
                                 Log.d(DEBUG_TAG, "  TopK=" + topK + ", ScoreFilter>=" + scoreFilter);
                                 
                                 // Maker準拠: trackOptから閾値を取得（マスク検知対応）
@@ -687,13 +692,27 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                     Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                                     Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST");
                                     Log.d(DEBUG_TAG, "  Candidate count: " + candidateList.size());
+                                    
+                                    // 1番目の候補（最有力）の名前とIDを取得して送信データに追加します
+                                    String topFaceToken = new String(candidates[0].faceToken);
+                                    String resultName = dbHelper.findName(topFaceToken);
+                                    String resultId = dbHelper.findEmployeeId(topFaceToken);
+                                    if (resultId == null || resultId.isEmpty()) {
+                                        resultId = topFaceToken;
+                                    }
+
+                                    Log.d(DEBUG_TAG, "  → Result Name: " + resultName);
+                                    Log.d(DEBUG_TAG, "  → Result ID: " + resultId);
+                                    
                                     for (int ci = 0; ci < candidateList.size(); ci++) {
-                                        Log.d(DEBUG_TAG, "  → Send[" + ci + "]: " + candidateList.get(ci));
+                                        Log.d(DEBUG_TAG, "  → List[" + ci + "]: " + candidateList.get(ci));
                                     }
                                     Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                                     
                                     android.content.Intent candidatesIntent = new android.content.Intent("com.bodycamera.ba.ACTION_CANDIDATE_LIST");
                                     candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
+                                    candidatesIntent.putExtra("result_name", resultName);
+                                    candidatesIntent.putExtra("result_id", resultId);
                                     sendBroadcast(candidatesIntent);
                                     
                                     Log.d(DEBUG_TAG, "★ [TopK] Broadcast sent → Finishing FacePassActivity...");
