@@ -11,6 +11,7 @@
 
     <!-- User List Dialog -->
     <string name="user_list_title">User List</string>
+    <string name="search_user_hint">Search user ID...</string>
     <string name="select_button">Select</string>
     <string name="close_button">Close</string>
     <string name="no_users_registered">No users registered</string>

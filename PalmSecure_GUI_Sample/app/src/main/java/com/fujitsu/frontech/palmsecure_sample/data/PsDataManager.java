@@ -449,6 +449,120 @@ public class PsDataManager {
         }
     }
 
+    /**
+     * Retrieves all unique user IDs that have registered vein templates.
+     * This is an optimized alternative to loading all BIR data at once.
+     *
+     * @return ArrayList of registered user IDs.
+     * @throws PsAplException Database error.
+     */
+    public ArrayList<String> getRegisteredUserIDList() throws PsAplException {
+        ArrayList<String> idList = new ArrayList<String>();
+        SQLiteDatabase db = null;
+        Cursor c = null;
+        String sql = "select distinct id from veindata_table where sensortype = ? and datatype = ? order by id;";
+
+        try {
+            db = mDbHelper.getReadableDatabase();
+            c = db.rawQuery(sql, new String[] { mSensorType, mDataType });
+            if (c != null && c.moveToFirst()) {
+                int columnId = c.getColumnIndex("id");
+                do {
+                    idList.add(c.getString(columnId));
+                } while (c.moveToNext());
+            }
+        } catch (SQLiteException e) {
+            if (BuildConfig.DEBUG) {
+                Log.e(TAG, "getRegisteredUserIDList", e);
+            }
+            PsAplException pae = new PsAplException(R.string.AplErrorSystemError);
+            throw pae;
+        } finally {
+            if (c != null) {
+                c.close();
+            }
+            if (db != null) {
+                db.close();
+            }
+        }
+
+        return idList;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // === Batch Fetch API (for Capture-Once + IdentifyMatch strategy) =========
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Lightweight container for a single vein template record from the database.
+     */
+    public static class TemplateRecord {
+        public final String id;
+        public final byte[] data;
+        public TemplateRecord(String id, byte[] data) {
+            this.id = id;
+            this.data = data;
+        }
+    }
+
+    /**
+     * Fetches all registered vein templates (raw blobs) in a single DB query.
+     * This is much faster than loading templates one group at a time.
+     * Memory: ~40KB per user (raw blob) → 1000 users ≈ 40MB (very safe).
+     */
+    public ArrayList<TemplateRecord> getAllRegisteredTemplates() throws PsAplException {
+        ArrayList<TemplateRecord> records = new ArrayList<>();
+        SQLiteDatabase db = null;
+        Cursor c = null;
+        String sql = "select id, veindata from veindata_table where sensortype = ? and datatype = ? order by recid;";
+
+        try {
+            db = mDbHelper.getReadableDatabase();
+            c = db.rawQuery(sql, new String[] { mSensorType, mDataType });
+            if (c != null && c.moveToFirst()) {
+                int colId  = c.getColumnIndex("id");
+                int colData = c.getColumnIndex("veindata");
+                do {
+                    records.add(new TemplateRecord(c.getString(colId), c.getBlob(colData)));
+                } while (c.moveToNext());
+            }
+        } catch (SQLiteException e) {
+            if (BuildConfig.DEBUG) Log.e(TAG, "getAllRegisteredTemplates", e);
+            throw new PsAplException(R.string.AplErrorSystemError);
+        } finally {
+            if (c != null) try { c.close(); } catch (Exception ignored) {}
+            if (db != null) try { db.close(); } catch (Exception ignored) {}
+        }
+        return records;
+    }
+
+    /**
+     * Converts a list of pre-fetched TemplateRecords into an SDK IDENTIFY_POPULATION.
+     * Used during chunked IdentifyMatch — avoids re-querying the database per chunk.
+     */
+    public JAVA_BioAPI_IDENTIFY_POPULATION convertRecordsToBioAPI_Data(
+            ArrayList<TemplateRecord> records) throws PsAplException, PalmSecureException {
+        if (records == null || records.isEmpty()) return null;
+
+        JAVA_BioAPI_IDENTIFY_POPULATION population = new JAVA_BioAPI_IDENTIFY_POPULATION();
+        population.Type = PalmSecureConstant.JAVA_BioAPI_ARRAY_TYPE;
+        population.BIRArray = new JAVA_BioAPI_BIR_ARRAY_POPULATION();
+        population.BIRArray.NumberOfMembers = records.size();
+        population.BIRArray.Members = new JAVA_BioAPI_BIR[records.size()];
+
+        for (int i = 0; i < records.size(); i++) {
+            try {
+                population.BIRArray.Members[i] = PalmSecureHelper.convertByteToBIR(records.get(i).data);
+            } catch (IOException e) {
+                if (BuildConfig.DEBUG) Log.e(TAG, "convertRecordsToBioAPI_Data index=" + i, e);
+                throw new PsAplException(R.string.AplErrorSystemError);
+            }
+        }
+        return population;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
     public void deleteDBToBioAPI_Data(String Name) throws PsAplException {
 
         SQLiteDatabase db = null;

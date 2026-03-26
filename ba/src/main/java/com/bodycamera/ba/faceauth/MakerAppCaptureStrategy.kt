@@ -30,11 +30,28 @@ class MakerAppCaptureStrategy : FaceCaptureStrategy {
         val serverUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "")
         val deviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "")
         val livenessThreshold = prefs.getFloat(SettingsActivity.KEY_LIVENESS_THRESHOLD, 88.0f)
+        val identDistIndex = prefs.getInt(SettingsActivity.KEY_IDENT_DISTANCE, 1) // Default to 1m
+        
+        // New Configuration Parameters
+        val topKCount = prefs.getInt(SettingsActivity.KEY_TOP_K, 1)
+        val recogThreshold = prefs.getFloat(SettingsActivity.KEY_RECOGNITION_THRESHOLD, 60.0f)
+        
+        // Mapping: 0.5m -> 150, 1m -> 100, 1.5m -> 60, 2m -> 25
+        val faceMinThreshold = when (identDistIndex) {
+            0 -> 150
+            1 -> 100
+            2 -> 60
+            3 -> 25
+            else -> 100
+        }
         
         intent.putExtra("server_url", serverUrl)
         intent.putExtra("device_id", deviceId)
         intent.putExtra("police_id", "null")
         intent.putExtra("liveness_threshold", livenessThreshold)
+        intent.putExtra("face_min_threshold", faceMinThreshold)
+        intent.putExtra("top_k_count", topKCount)
+        intent.putExtra("recognition_threshold", recogThreshold)
         
         // Pass use_topk flag if present
         if (options != null && options.containsKey("should_use_topk")) {

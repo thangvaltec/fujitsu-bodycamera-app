@@ -31,7 +31,8 @@ public class PsFileAccessorIni extends PsFileAccessor {
 	public static final int DEFAULT_GuideMode = 0;
 	public static final int DEFAULT_GExtendedMode = 2;
 	public static final int DEFAULT_MaxResults = 2;
-	public static final int DEFAULT_NumberOfRetry = 2;
+	//public static final int DEFAULT_NumberOfRetry = 1;速度3.7ms、NumberOfRetry = 2;速度5ms
+	public static final int DEFAULT_NumberOfRetry = 0;
 	public static final int DEFAULT_LogMode = 1;
 	public static final String DEFAULT_LogFolderPath = "Log";
 	public static final int DEFAULT_SilhouetteMode = 1;
