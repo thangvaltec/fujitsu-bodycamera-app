@@ -483,7 +483,7 @@ class VeinResultActivity : AppCompatActivity() {
             autoCloseRunnable = Runnable {
                 executeAutoLoopTransition()
             }
-            autoCloseHandler.postDelayed(autoCloseRunnable!!, 2000)
+            autoCloseHandler.postDelayed(autoCloseRunnable!!, 1500)
         }
     }
 

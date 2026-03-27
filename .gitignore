@@ -41,6 +41,7 @@ google-services.json
 
 # Temporary
 .tmp/
+.agents/
 caches/
 native/
 20260120 Facepass3568 (1)/
@@ -49,4 +50,3 @@ maker_sdk_doc/Facepassorigin/
 maker_sdk_doc/bin/
 document/
 テストSDK/
-.agents/

@@ -181,7 +181,7 @@ public class FaceManageActivity extends BaseActivity {
                     showImg.setImageBitmap(photo);
                     faceToken = new String(result.faceToken);
                 } else if (result.result == 1) {
-                    ToastUtils.showShort("未找到人脸");
+                    ToastUtils.showShort("顔未検出");
                 } else {
                     android.util.Log.d("addfaceDemo", "result:" + result.result
                             + ",bl:" + result.facePassQualityCheck.isBlurPassed
@@ -192,7 +192,7 @@ public class FaceManageActivity extends BaseActivity {
                             + ",lmkscore:" + result.landmarkscore
                             + ",brt:" + result.facePassQualityCheck.isBrightnessPassd
                             + ",occ_valid:" + result.lmkoccsta.valid);
-                    ToastUtils.showShort("人脸校验失败，请重新选择图片");
+                    ToastUtils.showShort("認証失敗。再度画像を選択してください。");
                 }
             }
         } catch (FacePassException e) {
@@ -229,8 +229,8 @@ public class FaceManageActivity extends BaseActivity {
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            String result = b ? "成功" : "失败";
-                            ToastUtils.showShort("录入" + result);
+                            String result = b ? "成功" : "失敗";
+                            ToastUtils.showShort("登録" + result);
 
                             FaceFeatureBean faceBean = new FaceFeatureBean();
                             faceBean.name = name;
@@ -270,10 +270,10 @@ public class FaceManageActivity extends BaseActivity {
                         if (selectedBitmap != null) {
                             showImage(selectedBitmap, selectedFilePath);
                         } else {
-                            ToastUtils.showShort("图片错误，请重新拍照");
+                            ToastUtils.showShort("画像エラーです。再撮影してください。");
                         }
                     } else {
-                        ToastUtils.showShort("照片走失啦！");
+                        ToastUtils.showShort("写真が見つかりません！");
                     }
                 }
                 break;
@@ -287,10 +287,10 @@ public class FaceManageActivity extends BaseActivity {
                         if (selectedBitmap != null) {
                             showImage(selectedBitmap, selectedFilePath);
                         } else {
-                            ToastUtils.showShort("图片错误，请重新拍照");
+                            ToastUtils.showShort("画像エラーです。再撮影してください。");
                         }
                     } else {
-                        ToastUtils.showShort("照片走失啦！");
+                        ToastUtils.showShort("写真が見つかりません！");
                     }
                 }
                 break;
@@ -336,7 +336,7 @@ public class FaceManageActivity extends BaseActivity {
 
 
     public void showDeleteDialog(final int position, final String faceId) {
-        Dialog dialog = new AlertDialog.Builder(this).setTitle("删除确认").setMessage("是否删除这张照片呢？").setPositiveButton("删除", new DialogInterface.OnClickListener() {
+        Dialog dialog = new AlertDialog.Builder(this).setTitle("削除の確認").setMessage("この写真を削除しますか？").setPositiveButton("削除", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
 //                FeatureDataSource.getInstance().deletePhotoBean(position);
@@ -351,7 +351,7 @@ public class FaceManageActivity extends BaseActivity {
                 }
 
                 if (adapter != null) adapter.notifyDataSetChanged();
-                Toast.makeText(FaceManageActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
+                Toast.makeText(FaceManageActivity.this, "削除成功", Toast.LENGTH_SHORT).show();
             }
         }).setNegativeButton("取消", new DialogInterface.OnClickListener() {
             @Override

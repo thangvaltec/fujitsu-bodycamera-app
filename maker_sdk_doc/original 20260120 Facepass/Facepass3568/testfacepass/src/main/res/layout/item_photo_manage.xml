@@ -39,7 +39,7 @@
             android:layout_marginLeft="@dimen/dp_30"
             android:layout_toRightOf="@+id/photo"
             android:textSize="@dimen/sp_18"
-            android:text="ID     ："
+            android:text="ID    ："
             android:textColor="#666" />
 
         <ImageView

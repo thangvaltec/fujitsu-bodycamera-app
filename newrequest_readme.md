@@ -258,4 +258,24 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
   );
 };
 
+
 export default DeviceSettingsPage;
+
+---
+
+## 4. 動的な待機時間設定の追加 (New Requirement)
+
+現在ハードコードされている以下の2つの待機時間を、設定画面 (SettingsActivity) から動的に変更できるように変更する。
+
+### 対象の待機時間:
+1.  **Face認証完了からVein認証開始までの待機時間 (Transition Delay)**:
+    *   場所: `TopActivity.kt` (現在 1000ms / 500ms)
+    *   目的: 顔認証成功後、ユーザーが手をかざす準備をするための時間を調整可能にする。
+2.  **結果画面表示から自動的に閉じるまでの待機時間 (Auto-Close Delay)**:
+    *   場所: `VeinResultActivity.kt` (現在 2000ms)
+    *   目的: 認証結果（OK/NG）を確認する時間の長さをユーザーが調整可能にする。
+
+### 仕様:
+- `SettingsActivity` にこれらの値を入力する項目を追加する。
+- 数値（ミリ秒）で入力し、`SharedPreferences` に保存する。
+- 保存された値がない場合は、現在のデフォルト値（500ms / 2000ms）を使用する。
