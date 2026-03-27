@@ -10,7 +10,7 @@ When working on this project, adhere to the following specific rules, context, a
 
 - **Main App (`ba` module)**: Core UI (`TopActivity`, `VeinResultActivity`, `SettingsActivity`), network (`DeviceApiClient`), orchestrates auth flow. Kotlin.
 - **PalmSecure App (`PalmSecure_GUI_Sample`)**: Standalone palm vein auth module. Java + Kotlin. Communicates with Main App via Intents/Broadcasts.
-- **Maker App (`maker_sdk_doc/Facepass3568/.../mcv/testfacepass`)**: FacePass SDK integration (`FacePassActivity.java`). Face detection, liveness, 1:N recognition. Java.
+- **Maker App (`maker_sdk_doc/original 20260120 Facepass/Facepass3568/testfacepass`)**: FacePass SDK integration (`FacePassActivity.java`). Face detection, liveness, 1:N recognition. Java.
 - **Communication**: Main App ↔ Maker App via `ACTION_AUTH_RESULT`, `ACTION_CANDIDATE_LIST` broadcasts. Main App ↔ PalmSecure via Intents.
 
 ## 2. Hardware Specifics (RK3568 Board)
