@@ -80,11 +80,21 @@ public class FacePassManager {
     }
 
     public void init(final Context context) {
+        // SDKが既に初期化済みの場合は何もしない（ダイアログも出さない）
+        if (mFacePassHandler != null && isInitFinished) {
+            Log.d(DEBUG_TAG, "FacePassManager.init: SDK is already initialized and finished. Skipping.");
+            return;
+        }
+
         // 创建并显示加载对话框
-        progressDialog = new ProgressDialog(context);
-        progressDialog.setMessage("SDKを初期化中...");
-        progressDialog.setCancelable(false); // 不可取消
-        progressDialog.show();
+        try {
+            progressDialog = new ProgressDialog(context);
+            progressDialog.setMessage("SDKを初期化中...");
+            progressDialog.setCancelable(false); // 不可取消
+            progressDialog.show();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
 
 

@@ -252,6 +252,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     private boolean mUseTopKMode = false; // Flag to enable TopK flow
     private int mTopKCount = 1;
     private float mRecognizeThreshold = 60.0f;
+    private boolean mLivenessEnabled = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -272,10 +273,13 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             float threshold = intent.getFloatExtra("liveness_threshold", 88.0f);
             FacePassManager.LIVENESS_THRESHOLD = threshold; // Apply global setting
             
+            mLivenessEnabled = intent.getBooleanExtra("liveness_enabled", true);
+            ComplexFrameHelper.isLivenessEnabled = mLivenessEnabled;
+            
             int faceMinThreshold = intent.getIntExtra("face_min_threshold", 100);
             FacePassManager.FACE_MIN_THRESHOLD = faceMinThreshold;
             
-            Log.d(DEBUG_TAG, "★ パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThresh=" + threshold + ", FaceMinThresh=" + faceMinThreshold + ", TopKCount=" + mTopKCount + ", RecogThresh=" + mRecognizeThreshold);
+            Log.d(DEBUG_TAG, "★ パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThresh=" + threshold + ", LivenessEnabled=" + mLivenessEnabled + ", FaceMinThresh=" + faceMinThreshold + ", TopKCount=" + mTopKCount + ", RecogThresh=" + mRecognizeThreshold);
         }
 
         /* 初始化界面 */
@@ -296,14 +300,25 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
         dbHelper = new DatabaseHelper(this);
 
-        // 修正: 認証画面から直接起動された場合のSDK遅延初期化
+        // SDKの遅延初期化または設定更新
         if (FacePassManager.mFacePassHandler == null) {
             Log.e(DEBUG_TAG, "!!! SDK not initialized. Initializing now from onCreate... !!!");
             FacePassManager.getInstance().init(this);
         } else {
-            Log.d(DEBUG_TAG, "SDK already initialized. Handler: " + FacePassManager.mFacePassHandler);
+            Log.d(DEBUG_TAG, "SDK already initialized. Updating config...");
+            // SDKが既に初期化されている場合、現在の設定（Liveness ON/OFF）をアルゴリズムに反映させる
+            try {
+                FacePassConfig config = FacePassManager.mFacePassHandler.getConfig();
+                if (config != null) {
+                    config.rgbIrLivenessEnabled = mLivenessEnabled;
+                    FacePassManager.mFacePassHandler.setConfig(config);
+                    Log.d(DEBUG_TAG, "SDK Config updated: rgbIrLivenessEnabled=" + mLivenessEnabled);
+                }
+            } catch (Exception e) {
+                Log.e(DEBUG_TAG, "Error updating SDK config: " + e.getMessage());
+                e.printStackTrace();
+            }
             Log.d(DEBUG_TAG, "InitFinished State: " + FacePassManager.getInstance().isInitFinished);
-            Log.d(DEBUG_TAG, "Group Status: isLocalGroupExist=" + FacePassManager.isLocalGroupExist);
         }
     }
 
@@ -319,7 +334,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         /* 打开相机 */
         if (hasPermission()) {
             manager.open(getWindowManager(), false, cameraWidth, cameraHeight);
-            mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+            if (mLivenessEnabled) {
+                mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+            } else {
+                Log.d(DEBUG_TAG, "★ Liveness disabled: Skipping IR camera open.");
+            }
         } else {
             requestPermission();
         }
@@ -371,7 +390,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 // Permissions granted, initialize SDK if needed or open camera
                 if (manager != null) {
                     manager.open(getWindowManager(), false, cameraWidth, cameraHeight);
-                    mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+                    if (mLivenessEnabled) {
+                        mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+                    }
                 }
                 
                 // Also retry init if it was skipped
@@ -431,8 +452,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 /* 将每一帧FacePassImage 送入SDK算法， 并得到返回结果 */
                 FacePassTrackResult detectionResult = null;
                 try {
-                    FacePassConfig cfg = FacePassManager.mFacePassHandler.getConfig();
-                    if (cfg.rgbIrLivenessEnabled) {
+                    if (mLivenessEnabled) {
                         FacePassImage imageRGB = new FacePassImage(framePair.first.nv21Data, framePair.first.width, framePair.first.height, cameraRotation, FacePassImageType.NV21);
                         FacePassImage imageIR = new FacePassImage(framePair.second.nv21Data, framePair.second.width, framePair.second.height, cameraRotation, FacePassImageType.NV21);
                         detectionResult = FacePassManager.mFacePassHandler.feedFrameRGBIR(imageRGB, imageIR);
@@ -563,63 +583,51 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
 
 					///////先活体再recognize
-                        ////////////////////////// live ness test/ FP_REG_MODE_LIVENESS ////////////FP_REG_MODE_LIVENESSTRACK //////////
-                        // Original livenessClassify call
-                        boolean livenessOK = false; // Track if liveness passed for anti-spoof
-                        FacePassLivenessResult[] livenessResult = FacePassManager.mFacePassHandler.livenessClassify(recognizeData.message, recognizeData.trackOpt[0].trackId, FacePassLivenessMode.FP_REG_MODE_LIVENESS, recognizeData.trackOpt[0].livenessThreshold);
-                        if (null != livenessResult && livenessResult.length > 0) {
-                            Log.d(DEBUG_TAG, "FacePassLivenessResult length = " + livenessResult.length);
-                            for (FacePassLivenessResult result : livenessResult) {
-                                String slivenessStat = " Unkonw";
-                                switch (result.livenessState) {
-                                    case 0:
-                                        slivenessStat = "LIVENESS_PASS";
-                                        
-                                        // ★ Score log (printed BEFORE capture so it's always visible)
-                                        Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (threshold: " + result.livenessThreshold + ")");
-                                        /* 
-                                         Anti-spoof: スコアが最低基準を満たすかチェック
-                                         if (result.livenessScore < LIVENESS_SCORE_MINIMUM) {
-                                             Log.w(DEBUG_TAG, "★ Score TOO LOW: " + result.livenessScore + " < " + LIVENESS_SCORE_MINIMUM + " → REJECTED (possible photo)");
-                                             break; // Treat as failed - don't increment pass count
-                                         }
-                                        */
-                                        livenessOK = true;
-                                        /* 
-                                         なりすまし安定化: trackIdに依存せず、連続PASS回数のみカウント
-                                         mConsecutivePassCount++;
-                                        
-                                         if (mConsecutivePassCount < REQUIRED_PASS_COUNT) {
-                                             Log.d(DEBUG_TAG, "Liveness: PASS (Count: " + mConsecutivePassCount + "/" + REQUIRED_PASS_COUNT + ") - Waiting for confirmation...");
-                                             break; 
-                                         }
-                                        */
+                        // ライブネス判定（なりすまし防止・写真攻撃防止）
+                        // mLivenessEnabled=true の場合: SDKのlivenessClassifyを呼び出してスコア検証
+                        // mLivenessEnabled=false の場合: 判定をスキップし、即時認証へ進む
+                        boolean livenessOK = false; // ライブネス判定の通過フラグ
 
-                                        // Capture logic moved to executeFaceCapture()
-                                        // Mode switching below will handle TopK or Legacy capture
-                                        break;
-                                    case 1:
-                                        slivenessStat = "LIVENESS_RETRY";
-                                        break;
-                                    case 2:
-                                        slivenessStat = "LIVENESS_RETRY_EXPIRED";
-                                        break;
-                                    case 3:
-                                        slivenessStat = "LIVENESS_TRACK_MISSING";
-                                        break;
-                                    case 4:
-                                        slivenessStat = "LIVENESS_UNPASS";
-                                        // if (mConsecutivePassCount > 0) mConsecutivePassCount--; // デクリメント（リセットではなく減算）
-                                        break;
-                                    default:
-                                        break;
+                        if (mLivenessEnabled) {
+                            FacePassLivenessResult[] livenessResult = FacePassManager.mFacePassHandler.livenessClassify(recognizeData.message, recognizeData.trackOpt[0].trackId, FacePassLivenessMode.FP_REG_MODE_LIVENESS, recognizeData.trackOpt[0].livenessThreshold);
+                            if (null != livenessResult && livenessResult.length > 0) {
+                                Log.d(DEBUG_TAG, "FacePassLivenessResult length = " + livenessResult.length);
+                                for (FacePassLivenessResult result : livenessResult) {
+                                    String slivenessStat = " Unkonw";
+                                    switch (result.livenessState) {
+                                        case 0:
+                                            slivenessStat = "LIVENESS_PASS";
+                                            
+                                            // ★ Score log (printed BEFORE capture so it's always visible)
+                                            Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (threshold: " + result.livenessThreshold + ")");
+                                            livenessOK = true;
+                                            break;
+                                        case 1:
+                                            slivenessStat = "LIVENESS_RETRY";
+                                            break;
+                                        case 2:
+                                            slivenessStat = "LIVENESS_RETRY_EXPIRED";
+                                            break;
+                                        case 3:
+                                            slivenessStat = "LIVENESS_TRACK_MISSING";
+                                            break;
+                                        case 4:
+                                            slivenessStat = "LIVENESS_UNPASS";
+                                            break;
+                                        default:
+                                            break;
+                                    }
+
+                                    Log.d(DEBUG_TAG, "FacePassLivenessResult: trackId: " + result.trackId
+                                            + ", livenessScore: " + result.livenessScore
+                                            + ", livenessThreshold: " + result.livenessThreshold
+                                            + ", livenessState: " + slivenessStat + ", livenessState: " + result.livenessState);
                                 }
-
-                                Log.d(DEBUG_TAG, "FacePassLivenessResult: trackId: " + result.trackId
-                                        + ", livenessScore: " + result.livenessScore
-                                        + ", livenessThreshold: " + result.livenessThreshold
-                                        + ", livenessState: " + slivenessStat + ", livenessState: " + result.livenessState);
                             }
+                        } else {
+                            // ライブネス無効設定: スコアチェックをスキップして即時OK扱い
+                            Log.d(DEBUG_TAG, "★ ライブネス無効: スコアチェックをスキップします。");
+                            livenessOK = true;
                         }
 
                         // 生体判定がパスした場合のみ認証実行（なりすまし防止・写真攻撃防止）
@@ -627,17 +635,16 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                             Log.d(DEBUG_TAG, "★ [TopK] Liveness PASSED → Recognize...");
 
-                            // Mode Switching Logic
+                            // 認証モード切替: Top-Kモード（ローカルサーバ）またはクラウドサーバ
                             if (mUseTopKMode) {
-                                // MODE: TopK (Flow 3 with "Use TopK" enabled)
-                                Log.d(DEBUG_TAG, "★ [TopK Mode] Starting Local Recognition...");
-                                
+                                // Top-Kモード: ローカルデータベースから上位K人の候補を取得
+                                Log.d(DEBUG_TAG, "★ [TopKモード] ローカル識別を開始...");
+
                                 int topK = mTopKCount;
                                 float scoreFilter = mRecognizeThreshold;
                                 Log.d(DEBUG_TAG, "  TopK=" + topK + ", ScoreFilter>=" + scoreFilter);
-                                
-                                // Maker準拠: trackOptから閾値を取得（マスク検知対応）
-                                // Call recognize with TopK, using Maker's original thresholds from trackOpt
+
+                                // Maker SDK準拠: trackOptから閾値を取得（マスク検知対応）
                                 FacePassRecognitionResult[] candidates = FacePassManager.mFacePassHandler.recognize(
                                         FacePassManager.group_name,
                                         recognizeData.message,
@@ -1123,7 +1130,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     String name = dbHelper.findName(faceToken);
                     String employeeId = dbHelper.findEmployeeId(faceToken);
                     Log.i(DEBUG_TAG, "getFaceImageByFaceToken:showToast");
-                    showToast("姓名 = " + name, Toast.LENGTH_SHORT, true, bitmap);
+                    showToast("氏名 = " + name, Toast.LENGTH_SHORT, true, bitmap);
                     //ID を表示する場合
                     // showToast("姓名 = " + name + "\nID = " + (employeeId != null ? employeeId : ""), Toast.LENGTH_SHORT, true, bitmap);
                 }

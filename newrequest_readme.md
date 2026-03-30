@@ -9,6 +9,7 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
   const [deviceId, setDeviceId] = useState('2222222');
   const [distance, setDistance] = useState('2m');
   const [liveness, setLiveness] = useState('88.0');
+  const [identificationLevel, setIdentificationLevel] = useState<'none' | 'partial'>('none');
   const [authMethod, setAuthMethod] = useState<'cloud' | 'local'>('cloud');
   const [faceVeinAuthMethod, setFaceVeinAuthMethod] = useState<'cloud' | 'local'>('cloud');
   const [autoAuthMethod, setAutoAuthMethod] = useState<'none' | 'face' | 'vein' | 'both'>('none');
@@ -17,7 +18,7 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
 
   const handleSave = () => {
     // In a real app, we would save these settings to local storage or via a bridge
-    console.log('Saving settings:', { serverUrl, deviceId, distance, liveness, authMethod, faceVeinAuthMethod, autoAuthMethod, topK, recognitionThreshold });
+    console.log('Saving settings:', { serverUrl, deviceId, distance, liveness, identificationLevel, authMethod, faceVeinAuthMethod, autoAuthMethod, topK, recognitionThreshold });
     onNavigateBack();
   };
 
@@ -72,6 +73,34 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
                     )}
                   </div>
                   <span className="text-white text-sm">{d}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Identification Level */}
+          <div>
+            <label className="block text-gray-400 text-sm mb-4">識別レベル（ライブネス判定ON/OFF）</label>
+            <div className="flex space-x-6">
+              {[
+                { id: 'none', label: '写真を判別しない' },
+                { id: 'partial', label: '写真を判別する' },
+              ].map((item) => (
+                <label key={item.id} className="flex items-center space-x-3 cursor-pointer">
+                  <div className="relative flex items-center justify-center">
+                    <input
+                      type="radio"
+                      name="identificationLevel"
+                      checked={identificationLevel === item.id}
+                      onChange={() => setIdentificationLevel(item.id as any)}
+                      className="sr-only"
+                    />
+                    <div className={`w-5 h-5 rounded-full border-2 transition-colors duration-200 ${identificationLevel === item.id ? 'border-[#38bdf8]' : 'border-gray-500'}`}></div>
+                    {identificationLevel === item.id && (
+                      <div className="absolute w-2.5 h-2.5 rounded-full bg-[#38bdf8]"></div>
+                    )}
+                  </div>
+                  <span className="text-white text-sm">{item.label}</span>
                 </label>
               ))}
             </div>

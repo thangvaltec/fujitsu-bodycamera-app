@@ -16,23 +16,23 @@ import com.bodycamera.tests.R
  */
 class SettingsActivity : AppCompatActivity() {
 
-    // Layout and Preference keys
+    // ビュー参照（テキストフィールド・ラジオグループ）
     private lateinit var etServerUrl: EditText
     private lateinit var etDeviceId: EditText
     private lateinit var etLivenessThreshold: EditText
     private lateinit var rgIdentDistance: android.widget.RadioGroup
-    
-    // Auto Auth Group (Grid Layout)
+
+    // 自動認証グループ（グリッドレイアウト用：RadioGroup未使用のため手動排他制御）
     private lateinit var rbAutoNone: android.widget.RadioButton
     private lateinit var rbAutoFace: android.widget.RadioButton
     private lateinit var rbAutoVein: android.widget.RadioButton
     private lateinit var rbAutoBoth: android.widget.RadioButton
-    
-    // Auth Method Setting
+
+    // 顔認証・顔＋静脈認証の認証方法選択グループ
     private lateinit var rgFaceAuthMethod: android.widget.RadioGroup
     private lateinit var rgFaceVeinAuthMethod: android.widget.RadioGroup
-    
-    // Top-K & Threshold
+
+    // Top-K人数と識別スコア閾値
     private lateinit var etTopK: EditText
     private lateinit var etRecognitionThreshold: EditText
 
@@ -51,6 +51,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_FACE_VEIN_AUTH_METHOD = "face_vein_auth_method" // cloud, local
         const val KEY_TOP_K = "top_k_count"
         const val KEY_RECOGNITION_THRESHOLD = "recognition_threshold"
+        const val KEY_LIVENESS_MODE = "liveness_mode" // on, off
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,7 +78,7 @@ class SettingsActivity : AppCompatActivity() {
 
         btnSave = findViewById(R.id.btnSave)
 
-        // Setup Mutual Exclusivity for Grid RadioButtons
+        // グリッド内RadioButtonの排他制御を設定（RadioGroup未使用のため手動管理）
         setupAutoAuthRadioLogic()
 
         loadSettings()
@@ -93,22 +94,22 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun loadSettings() {
-        // Load basic text fields
+        // テキストフィールドに保存済みの値を反映
         etServerUrl.setText(prefs.getString(KEY_SERVER_URL, ""))
         etDeviceId.setText(prefs.getString(KEY_DEVICE_ID, ""))
         etLivenessThreshold.setText(prefs.getFloat(KEY_LIVENESS_THRESHOLD, 88.0f).toString())
         etTopK.setText(prefs.getInt(KEY_TOP_K, 1).toString())
         etRecognitionThreshold.setText(prefs.getFloat(KEY_RECOGNITION_THRESHOLD, 60.0f).toString())
-        
-        // Load Ident Distance
+
+        // 識別距離の設定を反映（0=0.5m, 1=1m, 2=1.5m, 3=2m）
         when (prefs.getInt(KEY_IDENT_DISTANCE, 1)) {
             0 -> findViewById<android.widget.RadioButton>(R.id.rbDist05).isChecked = true
             1 -> findViewById<android.widget.RadioButton>(R.id.rbDist10).isChecked = true
             2 -> findViewById<android.widget.RadioButton>(R.id.rbDist15).isChecked = true
             3 -> findViewById<android.widget.RadioButton>(R.id.rbDist20).isChecked = true
         }
-        
-        // Load Auto Auth Setting
+
+        // 自動認証方法の設定を反映
         when (prefs.getString(KEY_AUTO_AUTH_METHOD, "none")) {
             "none" -> rbAutoNone.isChecked = true
             "face" -> rbAutoFace.isChecked = true
@@ -117,18 +118,25 @@ class SettingsActivity : AppCompatActivity() {
             else -> rbAutoNone.isChecked = true
         }
 
-        // Load Face Auth Method
+        // 顔認証方法（クラウド/ローカル）の設定を反映
         if (prefs.getString(KEY_FACE_AUTH_METHOD, "cloud") == "local") {
             findViewById<android.widget.RadioButton>(R.id.rbFaceLocal).isChecked = true
         } else {
             findViewById<android.widget.RadioButton>(R.id.rbFaceCloud).isChecked = true
         }
 
-        // Load Face+Vein Auth Method
+        // 顔と静脈認証方法（クラウド/ローカル）の設定を反映
         if (prefs.getString(KEY_FACE_VEIN_AUTH_METHOD, "cloud") == "local") {
             findViewById<android.widget.RadioButton>(R.id.rbFaceVeinLocal).isChecked = true
         } else {
             findViewById<android.widget.RadioButton>(R.id.rbFaceVeinCloud).isChecked = true
+        }
+
+        // ライブネスモード（写真判別ON/OFF）の設定を反映
+        if (prefs.getString(KEY_LIVENESS_MODE, "off") == "off") {
+            findViewById<android.widget.RadioButton>(R.id.rbLivenessOff).isChecked = true
+        } else {
+            findViewById<android.widget.RadioButton>(R.id.rbLivenessOn).isChecked = true
         }
     }
 
@@ -136,7 +144,7 @@ class SettingsActivity : AppCompatActivity() {
         val url = etServerUrl.text.toString().trim()
         val deviceId = etDeviceId.text.toString().trim()
         
-        // Validation
+        // 入力バリデーション
         if (url.isEmpty()) {
             etServerUrl.error = "サーバーURLを入力してください"
             return
@@ -146,10 +154,12 @@ class SettingsActivity : AppCompatActivity() {
             return
         }
 
+        // 数値フィールドのパース（不正値はデフォルト値を使用）
         val livenessVal = etLivenessThreshold.text.toString().toFloatOrNull() ?: 88.0f
         val topKVal = etTopK.text.toString().toIntOrNull() ?: 1
         val recogThresholdVal = etRecognitionThreshold.text.toString().toFloatOrNull() ?: 60.0f
-        
+
+        // 識別距離のインデックスを取得
         val identDistIndex = when (rgIdentDistance.checkedRadioButtonId) {
             R.id.rbDist05 -> 0
             R.id.rbDist10 -> 1
@@ -165,9 +175,11 @@ class SettingsActivity : AppCompatActivity() {
             else -> "none"
         }
         
+        // 顔認証・顔＋静脈認証の認証方法を取得
         val faceAuthMethod = if (rgFaceAuthMethod.checkedRadioButtonId == R.id.rbFaceLocal) "local" else "cloud"
         val faceVeinAuthMethod = if (rgFaceVeinAuthMethod.checkedRadioButtonId == R.id.rbFaceVeinLocal) "local" else "cloud"
 
+        // SharedPreferences への一括保存
         prefs.edit().apply {
             putString(KEY_SERVER_URL, url)
             putString(KEY_DEVICE_ID, deviceId)
@@ -178,6 +190,10 @@ class SettingsActivity : AppCompatActivity() {
             putString(KEY_FACE_VEIN_AUTH_METHOD, faceVeinAuthMethod)
             putInt(KEY_TOP_K, topKVal)
             putFloat(KEY_RECOGNITION_THRESHOLD, recogThresholdVal)
+            
+            val livenessMode = if (findViewById<android.widget.RadioGroup>(R.id.rgLivenessMode).checkedRadioButtonId == R.id.rbLivenessOff) "off" else "on"
+            putString(KEY_LIVENESS_MODE, livenessMode)
+            
             apply()
         }
 

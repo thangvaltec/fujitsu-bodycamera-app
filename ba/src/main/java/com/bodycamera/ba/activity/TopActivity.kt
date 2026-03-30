@@ -150,9 +150,9 @@ class TopActivity : AppCompatActivity() {
             
             Log.d(TAG, "Result received via Intent: Name=$resultName, ID=$resultID, Candidates=${candidateList?.size}")
             
-            // If we have a candidate list, we might want to trigger Vein Auth immediately if in Face+Vein mode
-            // usage: if (candidateList != null) ...
-            
+                // 候補リストがある場合、顔＋静脈モードで静脈認証を即時起動するロジックを追加可能（必要に応じて拡張）
+            // 例: if (candidateList != null) { launchPalmSecure(..., candidateList) }
+
             forwardFaceResultToVeinResultWithDetails(status, message, resultName, resultID, similarity)
         }
     }
@@ -212,17 +212,18 @@ class TopActivity : AppCompatActivity() {
         Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
 
-        // Read Cloud/Local setting from SharedPreferences
+        // SharedPreferences からクラウド/ローカル認証の設定を取得し、Top-Kモードを判定
         val isFlow3 = currentAuthMode() == "FaceAndVein"
         val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
-        
+
+        // フロー3（顔＋静脈）はローカルモード時のみTop-Kを使用
         val shouldUseTopK = if (isFlow3) {
             prefs.getString(SettingsActivity.KEY_FACE_VEIN_AUTH_METHOD, "cloud") == "local"
         } else {
             prefs.getString(SettingsActivity.KEY_FACE_AUTH_METHOD, "cloud") == "local"
         }
-        
-        Log.d(TAG, "Launch Policy: Flow3=$isFlow3 → UseTopK=$shouldUseTopK")
+
+        Log.d(TAG, "起動ポリシー: Flow3=$isFlow3 → UseTopK=$shouldUseTopK")
 
         intent.putExtra("should_use_topk", shouldUseTopK)
         
@@ -231,14 +232,14 @@ class TopActivity : AppCompatActivity() {
     }
 
     /**
-     * 顔認証（Flow1専用）を結果待ちで起動する
-     * - app側が setResult で ResultName / ResultID を返す前提
-     * - TopActivity を finish せず onActivityResult で受け取る
+     * 顔認証のみ（フロー1専用）を結果待ちで起動します。
+     * - setResult で ResultName / ResultID を受け取る前提
+     * - TopActivity を finish せず onActivityResult で結果を処理します
      */
     private fun launchFaceRecognitionForFaceOnly() {
-        Log.i(TAG, "launchFaceRecognitionForFaceOnly: Switching to Internal NewFaceAuthActivity")
+        Log.i(TAG, "launchFaceRecognitionForFaceOnly: NewFaceAuthActivity を起動（顔認証のみ）")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
-        
+
         val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
         val shouldUseTopK = prefs.getString(SettingsActivity.KEY_FACE_AUTH_METHOD, "cloud") == "local"
         intent.putExtra("should_use_topk", shouldUseTopK)
@@ -329,7 +330,7 @@ class TopActivity : AppCompatActivity() {
         dialog.show()
 
         // 遷移の待機時間を2000msから500ms（0.5秒）に短縮し、スムーズなUXを提供します。
-        transitionHandler.postDelayed(transitionTask, 500)
+        transitionHandler.postDelayed(transitionTask, 1000)
     }
 
     // 認証失敗した場合、認証を再実行

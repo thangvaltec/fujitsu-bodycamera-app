@@ -123,6 +123,45 @@
                 android:textSize="20sp" />
         </RadioGroup>
 
+        <!-- 識別レベル (Recognition Level) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp"
+            android:text="識別レベル（ライブネス判定ON/OFF）"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
+        <RadioGroup
+            android:id="@+id/rgLivenessMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="24dp">
+
+            <RadioButton
+                android:id="@+id/rbLivenessOff"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="写真を判別しない"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp"
+                android:checked="true" />
+
+            <RadioButton
+                android:id="@+id/rbLivenessOn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="写真を判別する"
+                android:textColor="#FFFFFF"
+                android:buttonTint="#0EA5E9"
+                android:textSize="18sp" />
+        </RadioGroup>
+
         <!-- Liveness Threshold -->
         <TextView
             android:layout_width="wrap_content"
