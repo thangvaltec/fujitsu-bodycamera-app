@@ -25,7 +25,7 @@ public class FacePassManager {
     private static final String RG_DEBUG_TAG = "RecognizeDemo";
     public boolean isInitFinished = false;
 
-    public static final String FILE_ROOT_PATH = "/sdcard/Download";
+    public static String FILE_ROOT_PATH = ""; // ★ Sửa Scoped Storage: Khởi tạo linh hoạt ở init()
 
     /* 人脸识别Group */
     public static String group_name = "facepass";
@@ -121,7 +121,8 @@ public class FacePassManager {
     }
 
     private boolean initFacePassSDK(Context context) throws IOException {
-        modelsPath = context.getExternalFilesDir(null).getAbsolutePath() + "/models";
+        FILE_ROOT_PATH = context.getExternalFilesDir(null).getAbsolutePath(); // ★ Tuân thủ Android 11 Scoped Storage
+        modelsPath = FILE_ROOT_PATH + "/models";
         FACE_ALGOMALL_CERT_PATH = modelsPath + "/facepass_test.cert";
         if (!new File(FACE_ALGOMALL_CERT_PATH).exists()) {
             FileUtil.copyAssetsToInternal(context, "models", modelsPath);

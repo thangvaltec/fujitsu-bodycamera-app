@@ -171,7 +171,8 @@ class NewFaceAuthActivity : AppCompatActivity() {
                     val resultName = intent.getStringExtra("result_name") ?: intent.getStringExtra("name")
                     val resultId = intent.getStringExtra("result_id") ?: intent.getStringExtra("id")
                     
-                    Log.d(TAG, "★受信ACTION_CANDIDATE_LIST: count=${candidates.size}, name=$resultName, id=$resultId")
+                    Log.d(TAG, "★ [デバッグ] 受信(Receiver) ACTION_CANDIDATE_LIST:")
+                    Log.d(TAG, "  → count=${candidates.size}, name=$resultName, id=$resultId")
                     handleCandidateList(candidates, resultName, resultId)
                 }
             }
@@ -202,15 +203,22 @@ class NewFaceAuthActivity : AppCompatActivity() {
 
             // 氏名とIDが取得できた場合は結果画面に表示させるためのキーをセットします。
             // これにより VeinResultActivity の handleNewFaceAuthIntent が正しい情報を表示できます。
+            // ★OOP対応: 値がNullやEmptyでないことを厳密にチェックします。
             if (!resultName.isNullOrEmpty()) {
                 putExtra("ResultName", resultName)
+                Log.d(TAG, "★ [デバッグ] PutExtra: ResultName=$resultName")
+            } else {
+                Log.e(TAG, "★ [警告] ResultNameが空です！DBから正しく引けていない可能性があります。")
             }
             if (!resultId.isNullOrEmpty()) {
                 putExtra("ResultID", resultId)
+                Log.d(TAG, "★ [デバッグ] PutExtra: ResultID=$resultId")
+            } else {
+                Log.e(TAG, "★ [警告] ResultIDが空です！")
             }
 
-            // メッセージはローカルモードの認証成功を示す適切なテキストに変更します。
-            val message = if (!resultName.isNullOrEmpty()) "顔認証成功" else "認証完了（候補リスト取得済み）"
+            // ★ UIクリーンアップ: メッセージ行からName/IDを削除し、下のボックス表示のみに集中させます。
+            val message = "認証成功"
             putExtra("ResultMessage", message)
         }
         setResult(RESULT_OK, data)

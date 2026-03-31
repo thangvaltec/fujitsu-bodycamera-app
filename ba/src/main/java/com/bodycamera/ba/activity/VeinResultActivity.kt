@@ -135,18 +135,16 @@ class VeinResultActivity : AppCompatActivity() {
                 )
         )
 
-        // Flow1: Hiển thị 氏名 + ID (một dòng "ID: 12345")
+        // Flow1: Hiển thị 氏名 + ID (Face Only flow legacy fallback)
         if (currentAuthMode == "Face" && !faceName.isNullOrEmpty()) {
             tvNameLabel.visibility = View.VISIBLE
             tvName.visibility = View.VISIBLE
-            tvName.text = faceName
+            // ★OOP対応: 名前が空の場合はデバッグ用メッセージを表示
+            tvName.text = if (!faceName.isNullOrEmpty()) faceName else "★氏名未登録(DBなし)"
 
-            if (!faceId.isNullOrEmpty()) {
-                tvIdLine.text = "ID: $faceId"
-                tvIdLine.visibility = View.VISIBLE
-            } else {
-                tvIdLine.visibility = View.GONE
-            }
+            tvIdLine.visibility = View.VISIBLE
+            // ★OOP対応: IDが空の場合はデバッグ用メッセージを表示
+            tvIdLine.text = if (!faceId.isNullOrEmpty()) "ID: $faceId" else "★ID未登録(DBなし)"
 
             // ログ送信 (Face Only) - バックグラウンドスレッドで実行してUI描画をブロックしない
             Thread { uploadAuthLog(isSuccess = true, veinId = null, veinResultStr = null) }.start()
@@ -158,20 +156,35 @@ class VeinResultActivity : AppCompatActivity() {
         // Flow2 & Flow3: IDと名前を表示します（名前がある場合）
         if (isSuccess) {
             val nameExtra = intent.getStringExtra("ResultName")
-            if (!nameExtra.isNullOrEmpty()) {
+            val idExtra = intent.getStringExtra("ResultID") ?: veinId // ★顔認証ID（ResultID）を優先し、無ければ静脈ID（veinId）を使用
+
+            // ★ Flow2(Vein Only)の場合は名前を表示しない（前回の顔認証セッションの名前ルーク防止）
+            val isVeinOnlyMode = (currentAuthMode == "Vein")
+            if (!isVeinOnlyMode && !nameExtra.isNullOrEmpty()) {
+                // Flow3(FaceAndVein)の場合のみ顔認証名を表示する
+                Log.d("VeinResultActivity", "★ [Flow3] 名前表示: $nameExtra")
                 tvNameLabel.visibility = View.VISIBLE
                 tvName.visibility = View.VISIBLE
                 tvName.text = nameExtra
+
+                tvIdLine.visibility = View.VISIBLE
+                tvIdLine.text = if (!idExtra.isNullOrEmpty()) "ID: $idExtra" else "★ID未登録(DBなし)"
+            } else if (!isVeinOnlyMode) {
+                // FaceAndVeinだが名前無しの場合はデバッグ文字を表示
+                tvNameLabel.visibility = View.VISIBLE
+                tvName.visibility = View.VISIBLE
+                tvName.text = "★氏名未登録(DBなし)"
+
+                tvIdLine.visibility = View.VISIBLE
+                tvIdLine.text = if (!idExtra.isNullOrEmpty()) "ID: $idExtra" else "★ID未登録(DBなし)"
             } else {
+                // Flow2(Vein Only): 名前は表示しない。IDのみ表示する
+                Log.d("VeinResultActivity", "★ [Flow2/Vein Only] 名前表示をスキップします（キャッシュリーク防止）")
                 tvNameLabel.visibility = View.GONE
                 tvName.visibility = View.GONE
-            }
 
-            if (!veinId.isNullOrEmpty()) {
-                tvIdLine.text = "ID: $veinId"
                 tvIdLine.visibility = View.VISIBLE
-            } else {
-                tvIdLine.visibility = View.GONE
+                tvIdLine.text = if (!idExtra.isNullOrEmpty()) "ID: $idExtra" else "★ID未登録(DBなし)"
             }
         } else {
             tvNameLabel.visibility = View.GONE
@@ -249,21 +262,21 @@ class VeinResultActivity : AppCompatActivity() {
             tvSimilarity.visibility = View.GONE
         }
 
-        // 4. 名前とID
-        if (isSuccess) {
-            if (!name.isNullOrEmpty()) {
-                tvNameLabel.visibility = View.VISIBLE
-                tvName.visibility = View.VISIBLE
-                tvName.text = name
-            }
-            if (!realId.isNullOrEmpty()) {
-                tvIdLine.text = "ID: $realId"
-                tvIdLine.visibility = View.VISIBLE
-            }
+        // 4. 名前とIDの表示 (★デバッグ対応: ローカル認証時は必ず表示するOOP設計)
+        // 氏名(name)またはID(realId)のどちらかが空であっても、画面から隠さずにデバッグ文字列を表示します。
+        tvNameLabel.visibility = View.VISIBLE
+        tvName.visibility = View.VISIBLE
+        if (!name.isNullOrEmpty()) {
+            tvName.text = name
         } else {
-            tvNameLabel.visibility = View.GONE
-            tvName.visibility = View.GONE
-            tvIdLine.visibility = View.GONE
+            tvName.text = "★氏名未登録(DBなし)"
+        }
+
+        tvIdLine.visibility = View.VISIBLE
+        if (!realId.isNullOrEmpty()) {
+            tvIdLine.text = "ID: $realId"
+        } else {
+            tvIdLine.text = "★ID未登録(DBなし)"
         }
 
         // 5. ボタン（新しいフローでは現在は終了ボタンのみ）

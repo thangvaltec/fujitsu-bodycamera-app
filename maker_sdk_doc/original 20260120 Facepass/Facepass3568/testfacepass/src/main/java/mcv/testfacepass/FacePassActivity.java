@@ -152,6 +152,17 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     private static final String ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE";
     private static final String ACTION_AUTH_RESULT = "com.bodycamera.ba.ACTION_AUTH_RESULT";
     private boolean mIsVerifying = false; // API応答待ち中はスキャンを一時停止するフラグ
+    private boolean mPendingFinish = false; // ★ UI kẹt 0s Fix: Cờ chờ đóng màn hình an toàn
+
+    private void safeFinish() {
+        if (hasWindowFocus()) {
+            Log.d(DEBUG_TAG, "★ safeFinish: Window has focus. Finishing immediately.");
+            finish();
+        } else {
+            Log.w(DEBUG_TAG, "★ safeFinish: Window NOT focused yet! Postponing finish() to prevent rapid transition crash.");
+            mPendingFinish = true;
+        }
+    }
 
     private final android.content.BroadcastReceiver authReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -182,7 +193,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                         mErrorToast = null;
                     }
                     // Toast.makeText(FacePassActivity.this, "Authentication Success", Toast.LENGTH_SHORT).show();
-                    finish(); // Maker App終了、以降はMain Appが処理する
+                    safeFinish(); // Maker App終了、以降はMain Appが処理する
                 } else {
                     // 認証失敗 → リトライ
                     String displayMsg = message != null ? message : "Verification Failed";
@@ -704,18 +715,29 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                     mIsVerifying = true;
                                     mDetectResultQueue.clear();
                                     
-                                    // 1番目の候補（最有力）の名前とIDを取得
+                                    // 1番目の候補（最有力）の名前とIDを取得（★ローカル認証用）
                                     String resultName = "";
                                     String resultId = "";
                                     try {
                                         String topFaceToken = (candidates[0].faceToken != null) ? new String(candidates[0].faceToken) : "";
+                                        Log.d(DEBUG_TAG, "★ [デバッグ] Local DB検索開始: 対象Token=" + topFaceToken);
+                                        
                                         resultName = dbHelper.findName(topFaceToken);
                                         resultId = dbHelper.findEmployeeId(topFaceToken);
+                                        
+                                        Log.d(DEBUG_TAG, "★ [デバッグ] DB抽出結果: Name=" + resultName + ", EmployeeID=" + resultId);
+
+                                        // ★ Null安全性（NullSafety）を確保するOOP設計
                                         if (resultId == null || resultId.isEmpty()) {
-                                            resultId = topFaceToken;
+                                            resultId = topFaceToken; // IDが見つからない場合はTokenをフォールバックとして使用
+                                            Log.w(DEBUG_TAG, "★ [警告] Employee IDが空です。TokenをIDとして代用します: " + resultId);
+                                        }
+                                        if (resultName == null) {
+                                            resultName = "";
+                                            Log.e(DEBUG_TAG, "★ [重大] 氏名(resultName)が見つかりません。DBが空、または登録データが未同期である可能性があります。");
                                         }
                                     } catch (Exception e) {
-                                        Log.e(DEBUG_TAG, "Metadata lookup failed in TopK branch", e);
+                                        Log.e(DEBUG_TAG, "★ [エラー] トップ候補のメタデータ検索中に例外が発生しました", e);
                                     }
 
                                     Log.d(DEBUG_TAG, "  → Result Name: " + resultName);
@@ -737,8 +759,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                     mAndroidHandler.post(new Runnable() {
                                         @Override
                                         public void run() {
-                                            Log.d(DEBUG_TAG, "★ [TopK] Calling finish() to close camera");
-                                            finish();
+                                            Log.d(DEBUG_TAG, "★ [TopK] Calling safeFinish() to close camera");
+                                            safeFinish();
                                         }
                                     });
                                     return; // Exit RecognizeThread
@@ -962,26 +984,38 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
     @Override
     protected void onDestroy() {
+        // 認識スレッドと映像供給スレッドを停止する
         mRecognizeThread.isInterrupt = true;
         mFeedFrameThread.isInterrupt = true;
 
         mRecognizeThread.interrupt();
         mFeedFrameThread.interrupt();
 
+        // カメラリソースを解放する
         if (manager != null) {
             manager.release();
         }
         if (mIRCameraManager != null) {
             mIRCameraManager.release();
         }
+
+        // Broadcast Receiverの登録を解除する
         try {
             unregisterReceiver(authReceiver);
         } catch (Exception e) {
-            // Receiver might not be registered
+            // Receiverが登録されていない場合は無視する
         }
 
+        // UIスレッドのタスクをすべてキャンセルする
         if (mAndroidHandler != null) {
             mAndroidHandler.removeCallbacksAndMessages(null);
+        }
+
+        // ★ DBコネクションを解放する（onDestroy()のみで行う）
+        // 注意: 各DBメソッド内では db.close() を呼ばず、ここで一括解放する。
+        //      これにより RecognizeThread 実行中に接続が切断される問題を防ぐ。
+        if (dbHelper != null) {
+            dbHelper.close();
         }
 
         /* ★ SDK解放をコメントアウト（パフォーマンス最適化）
@@ -1197,8 +1231,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
             // 1. キャプチャ用ディレクトリの準備とクリーンアップ
             String fileName = "face_" + System.currentTimeMillis() + ".jpg";
+            // ★ Sửa lỗi "Image file not found": Sử dụng thư mục Download để ứng dụng BA có thể truy cập được ảnh cho luồng Cloud Auth
             java.io.File sharedDir = new java.io.File(
-                android.os.Environment.getExternalStorageDirectory(), "FaceAuth");
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "FaceAuth");
             
             // ストレージ肥大化を防ぐため、新しい写真を保存する前に古いファイルをすべて削除します
             if (sharedDir.exists()) {
@@ -1323,6 +1358,17 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             }
         } catch (Exception e) {
             Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        Log.d(DEBUG_TAG, "★ onWindowFocusChanged: hasFocus=" + hasFocus + ", mPendingFinish=" + mPendingFinish);
+        if (hasFocus && mPendingFinish) {
+            Log.d(DEBUG_TAG, "★ onWindowFocusChanged: Executing postponed finish() safely.");
+            mPendingFinish = false;
+            finish();
         }
     }
 }

@@ -192,6 +192,9 @@ class TopActivity : AppCompatActivity() {
         btnVein.setOnClickListener {
             saveAuthMode("Vein")
             saveFaceResultPending(false)
+            // ★ 前回の顔認証キャッシュをリセット（名前・IDの引き継ぎ漏れ防止）
+            faceResultName = null
+            faceResultId = null
             launchPalmSecure("identify", null, true, true, true)
         }
 
@@ -362,6 +365,9 @@ class TopActivity : AppCompatActivity() {
                 // Flow2: 静脈認証のみ
                 saveAuthMode("Vein")
                 saveFaceResultPending(false)
+                // ★ サーバー指示でVein起動時: 前回の顔認証キャッシュをリセット（名前・IDの漏れ防止）
+                faceResultName = null
+                faceResultId = null
                 launchPalmSecure(
                     mode = "identify",
                     faceId = null,
@@ -425,24 +431,33 @@ class TopActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
         val autoMethod = prefs.getString(SettingsActivity.KEY_AUTO_AUTH_METHOD, "none") ?: "none"
         Log.d(TAG, "★ Auto-loop triggered: method=$autoMethod")
-        when (autoMethod) {
-            "face" -> {
-                saveAuthMode("Face")
-                saveFaceResultPending(true)
-                launchFaceRecognitionForFaceOnly()
+
+        // ★ SurfaceFlingerとカメラハードウェアの解放時間を確保するための1000ms遅延処理
+        // 設定表示時間が「0秒」や「1秒」と極端に短い場合、連続でActivityが破壊・再構築され、
+        // アプリがクラッシュ（crack）する問題を防ぎます。OOP設計に基づき安全な再起動を保証します。
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            when (autoMethod) {
+                "face" -> {
+                    saveAuthMode("Face")
+                    saveFaceResultPending(true)
+                    launchFaceRecognitionForFaceOnly()
+                }
+                "vein" -> {
+                    saveAuthMode("Vein")
+                    saveFaceResultPending(false)
+                    // ★ Auto-Loop時: 前回の顔認証キャッシュをリセット（名前・IDの引き継ぎ漏れ防止）
+                    faceResultName = null
+                    faceResultId = null
+                    launchPalmSecure("identify", null, autoStart = true, returnResult = true, fromExternal = true)
+                }
+                "both" -> {
+                    saveAuthMode("FaceAndVein")
+                    saveFaceResultPending(false)
+                    launchFaceRecognition()
+                }
+                else -> Log.d(TAG, "Auto-loop: mode=none, no auto-restart")
             }
-            "vein" -> {
-                saveAuthMode("Vein")
-                saveFaceResultPending(false)
-                launchPalmSecure("identify", null, autoStart = true, returnResult = true, fromExternal = true)
-            }
-            "both" -> {
-                saveAuthMode("FaceAndVein")
-                saveFaceResultPending(false)
-                launchFaceRecognition()
-            }
-            else -> Log.d(TAG, "Auto-loop: mode=none, no auto-restart")
-        }
+        }, 1000) // ★ 1秒のハードウェアクールダウン（UI遅延ではありません）
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -475,13 +490,15 @@ class TopActivity : AppCompatActivity() {
                         putExtra(VeinResultActivity.EXTRA_NOT_REGISTERED, notRegistered)
                         putExtra(VeinResultActivity.EXTRA_NO_VEIN_DATA, noVeinData)
 
-                        // 顔認証時の氏名とIDがあれば引き継ぎます（静脈認証成功時またはIDがある場合）
-                        if (faceResultName != null) {
+                        // ★ 顔認証時の氏名はFlow3(FaceAndVein)の場合のみ引き継ぎます。
+                        // Flow2(Vein Only)では顔認証キャッシュが残っていても絶対に渡しません。
+                        val isVeinOnlyMode = (currentAuthMode() == "Vein")
+                        if (!isVeinOnlyMode && faceResultName != null) {
                             putExtra("ResultName", faceResultName)
                         }
                         if (userIdStr != null) {
                             putExtra("ResultID", userIdStr) // 静脈IDを優先
-                        } else if (faceResultId != null) {
+                        } else if (!isVeinOnlyMode && faceResultId != null) {
                             putExtra("ResultID", faceResultId)
                         }
                     }
@@ -504,6 +521,11 @@ class TopActivity : AppCompatActivity() {
                 val resultId = data.getStringExtra("ResultID")
                 val similarity = data.getStringExtra("ResultSimilarity")
 
+                // ★ デバッグ用：Face認証(Local/Cloud)からの生データをログ出力して確認します。
+                Log.d(TAG, "★ [デバッグ] OnActivityResult REQUEST_FACE:")
+                Log.d(TAG, "  → status=$status, message=$message")
+                Log.d(TAG, "  → resultName=$resultName, resultId=$resultId")
+
                 val mode = currentAuthMode()
                 if (mode == "FaceAndVein") {
                     if (status == 2) {
@@ -524,11 +546,13 @@ class TopActivity : AppCompatActivity() {
                         }
                         Log.d(TAG, "═══════════════════════════════════════════")
                         if (candidateList != null && candidateList.isNotEmpty()) {
-                            Log.d(TAG, "★ [Flow3] TopK → PalmSecure起動 (${candidateList.size}人)")
-                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了 (TopK)\n手をかざしてください", null, candidateList)
+                            Log.d(TAG, "★ [Flow3] TopK (Local) → PalmSecure起動 (${candidateList.size}人)")
+                            // ★ローカル認証 (TopK) であることを明示します
+                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了 (Local)\n手をかざしてください", null, candidateList)
                         } else {
-                            Log.d(TAG, "★ [Flow3] Legacy → PalmSecure起動 (faceId=$resultId)")
-                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId, null)
+                            Log.d(TAG, "★ [Flow3] Legacy (Cloud) → PalmSecure起動 (faceId=$resultId)")
+                            // ★クラウド/レガシー認証であることを明示します
+                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました (Cloud)\n手をかざしてください", resultId, null)
                         }
                     } else {
                         // Flow3: 顔認証失敗 → 直接結果画面へ（再試行ボタン付き）
