@@ -15,10 +15,12 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
   const [autoAuthMethod, setAutoAuthMethod] = useState<'none' | 'face' | 'vein' | 'both'>('none');
   const [topK, setTopK] = useState('1');
   const [recognitionThreshold, setRecognitionThreshold] = useState('60');
+  const [resultDisplayTime, setResultDisplayTime] = useState('2');
+  const [messageDisplayTime, setMessageDisplayTime] = useState('1');
 
   const handleSave = () => {
     // In a real app, we would save these settings to local storage or via a bridge
-    console.log('Saving settings:', { serverUrl, deviceId, distance, liveness, identificationLevel, authMethod, faceVeinAuthMethod, autoAuthMethod, topK, recognitionThreshold });
+    console.log('Saving settings:', { serverUrl, deviceId, distance, liveness, identificationLevel, authMethod, faceVeinAuthMethod, autoAuthMethod, topK, recognitionThreshold, resultDisplayTime, messageDisplayTime });
     onNavigateBack();
   };
 
@@ -155,6 +157,17 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
             </p>
           </div>
 
+          {/* Result Screen Display Time */}
+          <div>
+            <label className="block text-gray-400 text-sm mb-2">結果画面表示設定時間(単位：s）</label>
+            <input
+              type="text"
+              value={resultDisplayTime}
+              onChange={(e) => setResultDisplayTime(e.target.value)}
+              className="w-full bg-[#1e293b] border border-transparent focus:border-[#38bdf8] rounded-sm py-3 px-4 text-white outline-none transition duration-200"
+            />
+          </div>
+
           {/* Face Auth Method */}
           <div>
             <label className="block text-gray-400 text-sm mb-4">顔認証方法</label>
@@ -273,6 +286,17 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
             </div>
           </div>
 
+          {/* Message Display Time Setting */}
+          <div>
+            <label className="block text-gray-400 text-sm mb-2">メッセージ表示の時間設定(単位：s）</label>
+            <input
+              type="text"
+              value={messageDisplayTime}
+              onChange={(e) => setMessageDisplayTime(e.target.value)}
+              className="w-full bg-[#1e293b] border border-transparent focus:border-[#38bdf8] rounded-sm py-3 px-4 text-white outline-none transition duration-200"
+            />
+          </div>
+
           {/* Save Button */}
           <button
             type="button"
@@ -288,3 +312,18 @@ const DeviceSettingsPage: React.FC<DeviceSettingsPageProps> = ({ onNavigateBack 
 };
 
 export default DeviceSettingsPage;
+
+4. 動的な待機時間設定の追加 (New Requirement)
+現在ハードコードされている以下の2つの待機時間を、設定画面 (SettingsActivity) から動的に変更できるように変更する。
+
+対象の待機時間:
+Face認証完了からVein認証開始までの待機時間 (Transition Delay):
+場所: TopActivity.kt (現在 1000ms / 500ms)
+目的: 顔認証成功後、ユーザーが手をかざす準備をするための時間を調整可能にする。
+結果画面表示から自動的に閉じるまでの待機時間 (Auto-Close Delay):
+場所: VeinResultActivity.kt (現在 2000ms)
+目的: 認証結果（OK/NG）を確認する時間の長さをユーザーが調整可能にする。
+仕様:
+SettingsActivity にこれらの値を入力する項目を追加する。
+数値（ミリ秒）で入力し、SharedPreferences に保存する。
+保存された値がない場合は、現在のデフォルト値（500ms / 2000ms）を使用する。

@@ -239,4 +239,31 @@ public class FileUtil {
             }
         }
     }
+
+    /**
+     * 指定されたディレクトリ内のすべてのファイルを削除します（ディレクトリ自体は削除しません）。
+     * 再利用性を高めるための汎 dụng ユーティリティメソッドです。
+     *
+     * @param dir 削除対象のファイルが含まれるディレクトリ
+     * @return すべての削除が成功した場合はtrue、それ以外はfalse
+     */
+    public static boolean deleteContents(File dir) {
+        if (dir == null || !dir.exists() || !dir.isDirectory()) {
+            return false;
+        }
+        File[] files = dir.listFiles();
+        if (files == null) {
+            return true;
+        }
+        boolean result = true;
+        for (File file : files) {
+            if (file.isFile()) {
+                if (!file.delete()) {
+                    result = false;
+                    Log.e("FileUtil", "Failed to delete file: " + file.getAbsolutePath());
+                }
+            }
+        }
+        return result;
+    }
 }

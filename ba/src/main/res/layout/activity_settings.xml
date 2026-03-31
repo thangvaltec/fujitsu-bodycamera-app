@@ -400,6 +400,50 @@
 
         </LinearLayout>
 
+        <!-- 結果画面表示設定時間 (Auto-Close Delay) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="結果画面表示設定時間(単位：s）"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
+        <EditText
+            android:id="@+id/etAutoCloseDelay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:background="#1F2937"
+            android:hint="2.0"
+            android:inputType="numberDecimal"
+            android:padding="12dp"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textColorHint="#4B5563" />
+
+        <!-- メッセージ表示の時間設定 (Transition Delay) -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="メッセージ表示の時間設定(単位：s）"
+            android:textColor="#9CA3AF"
+            android:textSize="20sp" />
+
+        <EditText
+            android:id="@+id/etTransitionDelay"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="32dp"
+            android:background="#1F2937"
+            android:hint="1.0"
+            android:inputType="numberDecimal"
+            android:padding="12dp"
+            android:textColor="#FFFFFF"
+            android:textSize="20sp"
+            android:textColorHint="#4B5563" />
+
         <!-- Save Button -->
         <Button
             android:id="@+id/btnSave"

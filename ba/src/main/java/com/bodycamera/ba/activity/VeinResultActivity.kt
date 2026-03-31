@@ -483,7 +483,12 @@ class VeinResultActivity : AppCompatActivity() {
             autoCloseRunnable = Runnable {
                 executeAutoLoopTransition()
             }
-            autoCloseHandler.postDelayed(autoCloseRunnable!!, 2000)
+            
+            // 設定画面から「結果画面表示設定時間」を取得。デフォルトは2.0秒（2000ms）です。
+            val autoCloseDelaySec = prefs.getFloat(SettingsActivity.KEY_AUTO_CLOSE_DELAY, 2.0f)
+            val delayMs = (autoCloseDelaySec * 1000).toLong()
+            
+            autoCloseHandler.postDelayed(autoCloseRunnable!!, delayMs)
         }
     }
 
@@ -491,7 +496,7 @@ class VeinResultActivity : AppCompatActivity() {
      * 自動ループ処理をトリガーし、TopActivity側で次のスキャンフェーズを開始させます。
      */
     private fun executeAutoLoopTransition() {
-        Log.d("VeinResultActivity", "自動継続ループを発火します。 TopActivity に戻ります。")
+        Log.d("VeinResultActivity", "自動継続ループを開始します。 TopActivity に戻ります。")
         val intent = Intent(this, TopActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             putExtra("is_auto_loop_continue", true)
@@ -502,7 +507,7 @@ class VeinResultActivity : AppCompatActivity() {
 
     /**
      * ハードウェアの戻るボタン処理をオーバーライドし、アプリ終了や戻る操作時に
-     * 意図せず自動連続認証（Auto-Loop）が発火するのを防止（キャンセル）します。
+     * 意図せず自動連続認証（Auto-Loop）が開始されるのを防止（キャンセル）します。
      */
     override fun onBackPressed() {
         Log.d("VeinResultActivity", "ハードウェアの戻るボタンが押されました。タイマーをキャンセルします。")

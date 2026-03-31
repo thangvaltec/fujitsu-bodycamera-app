@@ -700,12 +700,22 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                     Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST");
                                     Log.d(DEBUG_TAG, "  Candidate count: " + candidateList.size());
                                     
-                                    // 1番目の候補（最有力）の名前とIDを取得して送信データに追加します
-                                    String topFaceToken = new String(candidates[0].faceToken);
-                                    String resultName = dbHelper.findName(topFaceToken);
-                                    String resultId = dbHelper.findEmployeeId(topFaceToken);
-                                    if (resultId == null || resultId.isEmpty()) {
-                                        resultId = topFaceToken;
+                                    // 連続キャプチャ防止のためフラグを早期セット
+                                    mIsVerifying = true;
+                                    mDetectResultQueue.clear();
+                                    
+                                    // 1番目の候補（最有力）の名前とIDを取得
+                                    String resultName = "";
+                                    String resultId = "";
+                                    try {
+                                        String topFaceToken = (candidates[0].faceToken != null) ? new String(candidates[0].faceToken) : "";
+                                        resultName = dbHelper.findName(topFaceToken);
+                                        resultId = dbHelper.findEmployeeId(topFaceToken);
+                                        if (resultId == null || resultId.isEmpty()) {
+                                            resultId = topFaceToken;
+                                        }
+                                    } catch (Exception e) {
+                                        Log.e(DEBUG_TAG, "Metadata lookup failed in TopK branch", e);
                                     }
 
                                     Log.d(DEBUG_TAG, "  → Result Name: " + resultName);
@@ -722,9 +732,6 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                     candidatesIntent.putExtra("result_id", resultId);
                                     sendBroadcast(candidatesIntent);
                                     
-                                    Log.d(DEBUG_TAG, "★ [TopK] Broadcast sent → Finishing FacePassActivity...");
-                                    mIsVerifying = true;
-                                    mDetectResultQueue.clear();
                                     
                                     // Auto-close camera so NewFaceAuthActivity can return to TopActivity
                                     mAndroidHandler.post(new Runnable() {
@@ -1188,7 +1195,19 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 return;
             }
 
-            // 1. YuvImageを使用してNV21からJPEGに変換
+            // 1. キャプチャ用ディレクトリの準備とクリーンアップ
+            String fileName = "face_" + System.currentTimeMillis() + ".jpg";
+            java.io.File sharedDir = new java.io.File(
+                android.os.Environment.getExternalStorageDirectory(), "FaceAuth");
+            
+            // ストレージ肥大化を防ぐため、新しい写真を保存する前に古いファイルをすべて削除します
+            if (sharedDir.exists()) {
+                mcv.testfacepass.utils.FileUtil.deleteContents(sharedDir);
+            } else {
+                sharedDir.mkdirs();
+            }
+
+            // 2. YuvImageを使用してNV21からJPEGに変換
             android.graphics.YuvImage yuvImage = new android.graphics.YuvImage(
                     finalImageData,
                     android.graphics.ImageFormat.NV21,
@@ -1196,20 +1215,20 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     finalHeight,
                     null);
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 50, out); // 中間ステップのみ (RAM内)、品質50で十分
+            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 50, out);
             byte[] jpegBytes = out.toByteArray();
+            try { out.close(); } catch (Exception ignored) {}
 
-            // 2. 回転処理のためにBitmapにデコード
+            // 3. 回転処理のためにBitmapにデコード
             android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
             if (bitmap == null) {
                 Log.e(DEBUG_TAG, "Critical: JPEG Decode failed in memory!");
                 return;
             }
 
-            // 3. 回転処理 (270度)
+            // 4. 回転処理 (270度)
             int finalRotation = 270;
-            // 転送速度とタイムアウト防止のため、品質を80~100%に調整
-            int jpegQuality = 80; // Maximized to avoid "Low Quality" API error
+            int jpegQuality = 80;
 
             if (finalRotation != 0) {
                 android.graphics.Matrix matrix = new android.graphics.Matrix();
@@ -1221,7 +1240,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 }
             }
 
-            // 3.5 リサイズ処理 (最大1024px) - サーバー要件に合わせる
+            // 5. リサイズ処理 (最大1024px)
             int maxDim = 1024;
             int bw = bitmap.getWidth();
             int bh = bitmap.getHeight();
@@ -1243,16 +1262,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 Log.d(DEBUG_TAG, "Resized: " + bw + "x" + bh + " → " + newW + "x" + newH);
             }
 
-            // 4. 共有ディレクトリに保存 (Scoped Storage対策: 両アプリがアクセス可能な場所)
-            String fileName = "face_" + System.currentTimeMillis() + ".jpg";
-            java.io.File sharedDir = new java.io.File(
-                android.os.Environment.getExternalStorageDirectory(), "FaceAuth");
-            if (!sharedDir.exists()) {
-                sharedDir.mkdirs();
-            }
-            
+            // 6. ファイルへの最終保存
             java.io.File destFile = new java.io.File(sharedDir, fileName);
-            
             java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
             boolean compressOk = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, jpegQuality, fos);
             fos.flush();
@@ -1260,10 +1271,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
             if (!compressOk || destFile.length() == 0) {
                 Log.e(DEBUG_TAG, "Failed to compress bitmap to file!");
+                if (bitmap != null) bitmap.recycle();
                 return;
             }
 
-            // 5. FileProviderを介してコンテンツURIを返す (Android 11+ 対策)
+            // 7. FileProviderを介してコンテンツURIを返す (Android 11+ 対策)
             final String finalPath = destFile.getAbsolutePath();
             final int finalW = bitmap.getWidth();
             final int finalH = bitmap.getHeight();
@@ -1304,6 +1316,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mDetectResultQueue.clear(); 
             
             Log.d(DEBUG_TAG, "★ 待機 API応答待ち開始 (mIsVerifying=true)");
+            
+            // 8. メモリ解放
+            if (bitmap != null) {
+                bitmap.recycle();
+            }
         } catch (Exception e) {
             Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
         }

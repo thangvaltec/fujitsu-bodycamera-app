@@ -32,9 +32,12 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var rgFaceAuthMethod: android.widget.RadioGroup
     private lateinit var rgFaceVeinAuthMethod: android.widget.RadioGroup
 
-    // Top-K人数と識別スコア閾値
     private lateinit var etTopK: EditText
     private lateinit var etRecognitionThreshold: EditText
+
+    // 待機時間設定 (秒単位で入力)
+    private lateinit var etTransitionDelay: EditText
+    private lateinit var etAutoCloseDelay: EditText
 
     private lateinit var btnSave: Button
     private lateinit var prefs: SharedPreferences
@@ -52,6 +55,10 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_TOP_K = "top_k_count"
         const val KEY_RECOGNITION_THRESHOLD = "recognition_threshold"
         const val KEY_LIVENESS_MODE = "liveness_mode" // on, off
+
+        // 待機時間用のキー (Float: 秒単位)
+        const val KEY_TRANSITION_DELAY = "transition_delay_sec"
+        const val KEY_AUTO_CLOSE_DELAY = "auto_close_delay_sec"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +82,9 @@ class SettingsActivity : AppCompatActivity() {
         
         etTopK = findViewById(R.id.etTopK)
         etRecognitionThreshold = findViewById(R.id.etRecognitionThreshold)
+
+        etTransitionDelay = findViewById(R.id.etTransitionDelay)
+        etAutoCloseDelay = findViewById(R.id.etAutoCloseDelay)
 
         btnSave = findViewById(R.id.btnSave)
 
@@ -100,6 +110,10 @@ class SettingsActivity : AppCompatActivity() {
         etLivenessThreshold.setText(prefs.getFloat(KEY_LIVENESS_THRESHOLD, 88.0f).toString())
         etTopK.setText(prefs.getInt(KEY_TOP_K, 1).toString())
         etRecognitionThreshold.setText(prefs.getFloat(KEY_RECOGNITION_THRESHOLD, 60.0f).toString())
+
+        // 待機時間の読み込み (デフォルト値: 遷移 1.0s, 自動終了 2.0s)
+        etTransitionDelay.setText(prefs.getFloat(KEY_TRANSITION_DELAY, 1.0f).toString())
+        etAutoCloseDelay.setText(prefs.getFloat(KEY_AUTO_CLOSE_DELAY, 2.0f).toString())
 
         // 識別距離の設定を反映（0=0.5m, 1=1m, 2=1.5m, 3=2m）
         when (prefs.getInt(KEY_IDENT_DISTANCE, 1)) {
@@ -190,6 +204,10 @@ class SettingsActivity : AppCompatActivity() {
             putString(KEY_FACE_VEIN_AUTH_METHOD, faceVeinAuthMethod)
             putInt(KEY_TOP_K, topKVal)
             putFloat(KEY_RECOGNITION_THRESHOLD, recogThresholdVal)
+
+            // 待機時間設定の保存 (Float: 秒単位)
+            putFloat(KEY_TRANSITION_DELAY, etTransitionDelay.text.toString().toFloatOrNull() ?: 1.0f)
+            putFloat(KEY_AUTO_CLOSE_DELAY, etAutoCloseDelay.text.toString().toFloatOrNull() ?: 2.0f)
             
             val livenessMode = if (findViewById<android.widget.RadioGroup>(R.id.rgLivenessMode).checkedRadioButtonId == R.id.rbLivenessOff) "off" else "on"
             putString(KEY_LIVENESS_MODE, livenessMode)

@@ -329,8 +329,13 @@ class TopActivity : AppCompatActivity() {
 
         dialog.show()
 
-        // 遷移の待機時間を2000msから500ms（0.5秒）に短縮し、スムーズなUXを提供します。
-        transitionHandler.postDelayed(transitionTask, 1000)
+        // 設定画面から「メッセージ表示の時間設定」を取得。デフォルトは1.0秒（1000ms）です。
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+        val transitionDelaySec = prefs.getFloat(SettingsActivity.KEY_TRANSITION_DELAY, 1.0f)
+        val delayMs = (transitionDelaySec * 1000).toLong()
+
+        // 遷移タスクを設定された時間後に実行します
+        transitionHandler.postDelayed(transitionTask, delayMs)
     }
 
     // 認証失敗した場合、認証を再実行
