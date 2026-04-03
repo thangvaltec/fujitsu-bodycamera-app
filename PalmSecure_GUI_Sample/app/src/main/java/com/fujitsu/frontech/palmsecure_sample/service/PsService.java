@@ -736,14 +736,14 @@ public class PsService {
 
 		PsDataManager dataMng = new PsDataManager(mActivity,
 				mUsingSensorType, mUsingDataType);
-		idList = new ArrayList<String>();
 
 		try {
-			dataMng.convertDBToBioAPI_Data_All(idList);
-		} catch (PsAplException | PalmSecureException e) {
+			idList = dataMng.getRegisteredUserIDList();
+		} catch (PsAplException e) {
 			if (BuildConfig.DEBUG) {
 				Log.e(TAG, "Init List", e);
 			}
+			idList = new ArrayList<String>(); // fallback: list rỗng khi DB lỗi
 		}
 	}
 
@@ -753,18 +753,14 @@ public class PsService {
 
 		PsDataManager dataMng = new PsDataManager(mActivity,
 				mUsingSensorType, mUsingDataType);
-		if (idList == null) {
-			idList = new ArrayList<String>();
-		} else {
-			idList.clear();
-		}
 
 		try {
-			dataMng.convertDBToBioAPI_Data_All(idList);
-		} catch (PsAplException | PalmSecureException e) {
+			idList = dataMng.getRegisteredUserIDList();
+		} catch (PsAplException e) {
 			if (BuildConfig.DEBUG) {
 				Log.e(TAG, "Refresh List", e);
 			}
+			// Giữ nguyên idList cũ khi DB lỗi (không xóa data đang dùng)
 		}
 	}
 

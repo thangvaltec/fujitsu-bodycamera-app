@@ -1,8 +1,12 @@
-﻿package com.bodycamera.ba.activity
+package com.bodycamera.ba.activity
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
@@ -49,6 +53,10 @@ class VeinResultActivity : AppCompatActivity() {
     private var currentAuthMode: String = ""
     private var faceName: String? = null // Flow1 用
     private var faceId: String? = null // Flow1 用
+    
+    // Auto-Close Timer properties
+    private val autoCloseHandler = Handler(Looper.getMainLooper())
+    private var autoCloseRunnable: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,18 +135,16 @@ class VeinResultActivity : AppCompatActivity() {
                 )
         )
 
-        // Flow1: Hiển thị 氏名 + ID (một dòng "ID: 12345")
+        // Flow1: Hiển thị 氏名 + ID (Face Only flow legacy fallback)
         if (currentAuthMode == "Face" && !faceName.isNullOrEmpty()) {
             tvNameLabel.visibility = View.VISIBLE
             tvName.visibility = View.VISIBLE
-            tvName.text = faceName
+            // ★OOP対応: 名前が空の場合はデバッグ用メッセージを表示
+            tvName.text = if (!faceName.isNullOrEmpty()) faceName else "★氏名未登録(DBなし)"
 
-            if (!faceId.isNullOrEmpty()) {
-                tvIdLine.text = "ID: $faceId"
-                tvIdLine.visibility = View.VISIBLE
-            } else {
-                tvIdLine.visibility = View.GONE
-            }
+            tvIdLine.visibility = View.VISIBLE
+            // ★OOP対応: IDが空の場合はデバッグ用メッセージを表示
+            tvIdLine.text = if (!faceId.isNullOrEmpty()) "ID: $faceId" else "★ID未登録(DBなし)"
 
             // ログ送信 (Face Only) - バックグラウンドスレッドで実行してUI描画をブロックしない
             Thread { uploadAuthLog(isSuccess = true, veinId = null, veinResultStr = null) }.start()
@@ -147,16 +153,44 @@ class VeinResultActivity : AppCompatActivity() {
             return
         }
 
-        // Flow2 & Flow3: chỉ hiển thị ID nếu có, không dùng name
-        if (isSuccess && !veinId.isNullOrEmpty()) {
-            tvIdLine.text = "ID: $veinId"
-            tvIdLine.visibility = View.VISIBLE
+        // Flow2 & Flow3: IDと名前を表示します（名前がある場合）
+        if (isSuccess) {
+            val nameExtra = intent.getStringExtra("ResultName")
+            val idExtra = intent.getStringExtra("ResultID") ?: veinId // ★顔認証ID（ResultID）を優先し、無ければ静脈ID（veinId）を使用
+
+            // ★ Flow2(Vein Only)の場合は名前を表示しない（前回の顔認証セッションの名前ルーク防止）
+            val isVeinOnlyMode = (currentAuthMode == "Vein")
+            if (!isVeinOnlyMode && !nameExtra.isNullOrEmpty()) {
+                // Flow3(FaceAndVein)の場合のみ顔認証名を表示する
+                Log.d("VeinResultActivity", "★ [Flow3] 名前表示: $nameExtra")
+                tvNameLabel.visibility = View.VISIBLE
+                tvName.visibility = View.VISIBLE
+                tvName.text = nameExtra
+
+                tvIdLine.visibility = View.VISIBLE
+                tvIdLine.text = if (!idExtra.isNullOrEmpty()) "ID: $idExtra" else "★ID未登録(DBなし)"
+            } else if (!isVeinOnlyMode) {
+                // FaceAndVeinだが名前無しの場合はデバッグ文字を表示
+                tvNameLabel.visibility = View.VISIBLE
+                tvName.visibility = View.VISIBLE
+                tvName.text = "★氏名未登録(DBなし)"
+
+                tvIdLine.visibility = View.VISIBLE
+                tvIdLine.text = if (!idExtra.isNullOrEmpty()) "ID: $idExtra" else "★ID未登録(DBなし)"
+            } else {
+                // Flow2(Vein Only): 名前は表示しない。IDのみ表示する
+                Log.d("VeinResultActivity", "★ [Flow2/Vein Only] 名前表示をスキップします（キャッシュリーク防止）")
+                tvNameLabel.visibility = View.GONE
+                tvName.visibility = View.GONE
+
+                tvIdLine.visibility = View.VISIBLE
+                tvIdLine.text = if (!idExtra.isNullOrEmpty()) "ID: $idExtra" else "★ID未登録(DBなし)"
+            }
         } else {
+            tvNameLabel.visibility = View.GONE
+            tvName.visibility = View.GONE
             tvIdLine.visibility = View.GONE
         }
-
-        tvNameLabel.visibility = View.GONE
-        tvName.visibility = View.GONE
 
         // 静脈データが1件も登録されていない場合（最優先で表示）
         val noVeinData = intent.getBooleanExtra(EXTRA_NO_VEIN_DATA, false)
@@ -190,6 +224,7 @@ class VeinResultActivity : AppCompatActivity() {
         Thread { uploadAuthLog(isSuccess, veinId, veinResult) }.start()
 
         showButtons(isSuccess)
+        startAutoCloseTimer(isSuccess)
     }
 
     private fun handleNewFaceAuthIntent() {
@@ -227,21 +262,21 @@ class VeinResultActivity : AppCompatActivity() {
             tvSimilarity.visibility = View.GONE
         }
 
-        // 4. 名前とID
-        if (isSuccess) {
-            if (!name.isNullOrEmpty()) {
-                tvNameLabel.visibility = View.VISIBLE
-                tvName.visibility = View.VISIBLE
-                tvName.text = name
-            }
-            if (!realId.isNullOrEmpty()) {
-                tvIdLine.text = "ID: $realId"
-                tvIdLine.visibility = View.VISIBLE
-            }
+        // 4. 名前とIDの表示 (★デバッグ対応: ローカル認証時は必ず表示するOOP設計)
+        // 氏名(name)またはID(realId)のどちらかが空であっても、画面から隠さずにデバッグ文字列を表示します。
+        tvNameLabel.visibility = View.VISIBLE
+        tvName.visibility = View.VISIBLE
+        if (!name.isNullOrEmpty()) {
+            tvName.text = name
         } else {
-            tvNameLabel.visibility = View.GONE
-            tvName.visibility = View.GONE
-            tvIdLine.visibility = View.GONE
+            tvName.text = "★氏名未登録(DBなし)"
+        }
+
+        tvIdLine.visibility = View.VISIBLE
+        if (!realId.isNullOrEmpty()) {
+            tvIdLine.text = "ID: $realId"
+        } else {
+            tvIdLine.text = "★ID未登録(DBなし)"
         }
 
         // 5. ボタン（新しいフローでは現在は終了ボタンのみ）
@@ -249,6 +284,7 @@ class VeinResultActivity : AppCompatActivity() {
         llRetryActions.visibility = View.GONE
 
         // ログ送信は後で追加?
+        startAutoCloseTimer(isSuccess)
     }
 
     private fun showButtons(isSuccess: Boolean) {
@@ -265,13 +301,11 @@ class VeinResultActivity : AppCompatActivity() {
 
         // 成功時：「終了」→ TopActivityへ
         btnFinish.setOnClickListener {
-            startActivity(
-                    Intent(this, TopActivity::class.java)
-                            .addFlags(
-                                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                                            Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            )
-            )
+            val intent = Intent(this, TopActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra("is_auto_loop_continue", true)
+            }
+            startActivity(intent)
             finish()
         }
 
@@ -441,5 +475,71 @@ class VeinResultActivity : AppCompatActivity() {
             // ログ送信失敗してもメインフロー(UI)は止めない
             e.printStackTrace()
         }
+    }
+
+    /**
+     * 認証結果（成功・失敗）に関わらず、設定に基づき自動的に次の認証を開始するためのタイマーを起動します。
+     * オブジェクト指向の観点からタイマー実行ロジックを分離し、独立したタスクとしてスケジュールします。
+     */
+    private fun startAutoCloseTimer(isSuccess: Boolean) {
+        // NGの場合でも自動的にスキャンを継続するため、(if (!isSuccess) return) の制限を除外しました。
+
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+        val autoAuthMethod = prefs.getString(SettingsActivity.KEY_AUTO_AUTH_METHOD, "none") ?: "none"
+        
+        if (autoAuthMethod != "none") {
+            // 現在のUI状態に合わせて、ボタンに「自動継続中」のメッセージを表示します
+            // 成功時・失敗時それぞれで表示されるボタンが異なる場合があるため両方に設定します。
+            btnFinish.text = "終了 (自動継続中)"
+            btnRetry.text = "再実行 (自動継続中)"
+            
+            autoCloseRunnable = Runnable {
+                executeAutoLoopTransition()
+            }
+            
+            // 設定画面から「結果画面表示設定時間」を取得。デフォルトは2.0秒（2000ms）です。
+            val autoCloseDelaySec = prefs.getFloat(SettingsActivity.KEY_AUTO_CLOSE_DELAY, 2.0f)
+            val delayMs = (autoCloseDelaySec * 1000).toLong()
+            
+            autoCloseHandler.postDelayed(autoCloseRunnable!!, delayMs)
+        }
+    }
+
+    /**
+     * 自動ループ処理をトリガーし、TopActivity側で次のスキャンフェーズを開始させます。
+     */
+    private fun executeAutoLoopTransition() {
+        Log.d("VeinResultActivity", "自動継続ループを開始します。 TopActivity に戻ります。")
+        val intent = Intent(this, TopActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra("is_auto_loop_continue", true)
+        }
+        startActivity(intent)
+        finish()
+    }
+
+    /**
+     * ハードウェアの戻るボタン処理をオーバーライドし、アプリ終了や戻る操作時に
+     * 意図せず自動連続認証（Auto-Loop）が開始されるのを防止（キャンセル）します。
+     */
+    override fun onBackPressed() {
+        Log.d("VeinResultActivity", "ハードウェアの戻るボタンが押されました。タイマーをキャンセルします。")
+        cancelAutoLoopTimer()
+        super.onBackPressed()
+    }
+
+    /**
+     * スケジュールされた自動遷移タスク（Runnable）をキャンセル・無効化します。
+     */
+    private fun cancelAutoLoopTimer() {
+        autoCloseRunnable?.let {
+            autoCloseHandler.removeCallbacks(it)
+            autoCloseRunnable = null
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cancelAutoLoopTimer()
     }
 }

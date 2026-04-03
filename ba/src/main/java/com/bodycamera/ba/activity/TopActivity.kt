@@ -1,4 +1,4 @@
-﻿package com.bodycamera.ba.activity
+package com.bodycamera.ba.activity
 
 //
 
@@ -23,101 +23,6 @@ import com.bodycamera.tests.databinding.ActivityFace3Binding
 import com.yuy.api.manager.IBodyCameraService
 
 class TopActivity : AppCompatActivity() {
-    // 1) HÀM LẤY SERIAL (ở trên)
-    /*@SuppressLint("HardwareIds", "PrivateApi")
-    private fun getDeviceSerialNumber(): String {
-        return try {
-            val clazz = Class.forName("android.os.SystemProperties")
-            val get = clazz.getMethod("get", String::class.java)
-
-            val keys = listOf(
-                "vendor.gsm.serial",  // BodyCamera向けベンダー独自シリアル
-                "ro.serialno",
-                "ro.boot.serialno",
-                "persist.sys.serialno",
-                "gsm.serial",
-                "ril.serialnumber"
-            )
-
-            for (key in keys) {
-                var value = get.invoke(null, key) as String
-                if (!value.isNullOrEmpty() && value != "unknown") {
-                    value = value.trim()
-                    if (value.contains(" ")) {
-                        value = value.substringBefore(" ")
-                    }
-                    Log.d("SERIAL_TEST", "Found serial from $key = $value")
-                    return value
-                }
-            }
-
-            // ここまで来たらハードウェアシリアルは取得できなかった → ANDROID_ID にフォールバック
-            val androidId = android.provider.Settings.Secure.getString(
-                contentResolver,
-                android.provider.Settings.Secure.ANDROID_ID
-            )
-            Log.d("SERIAL_TEST", "Fallback ANDROID_ID = $androidId")
-
-            androidId ?: "UNKNOWN"
-
-        } catch (e: Exception) {
-            Log.e("SERIAL_TEST", "Error getDeviceSerialNumber: $e")
-            "UNKNOWN"
-        }
-    }*/
-
-    /*@SuppressLint("PrivateApi")
-    private fun getDeviceSerialNumber(): String {
-        return try {
-            val clazz = Class.forName("android.os.SystemProperties")
-            val get = clazz.getMethod("get", String::class.java)
-
-            // CHỈ LẤY vendor.gsm.serial (thiết bị của bạn cho phép truy cập)
-            val value = get.invoke(null, "vendor.gsm.serial") as String
-
-            if (!value.isNullOrEmpty() && value != "unknown") value else "UNKNOWN"
-
-        } catch (e: Exception) {
-            "UNKNOWN"
-        }
-    }
-    */
-    // 2) HÀM GỬI SERIAL LÊN API (đặt ở ngay dưới getDeviceSerialNumber)
-    /*private fun sendSerialToServer(serial: String, callback: (Int?) -> Unit) {
-
-        val client = OkHttpClient()
-
-        val json = JSONObject().apply { put("serialNo", serial) }
-
-        val body = json.toString()
-            .toRequestBody("application/json".toMediaType())
-
-        val request = Request.Builder()
-            .url("http://10.200.2.29:5000/api/device/getAuthMode")
-            .post(body)
-            .build()
-
-        client.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: okhttp3.Call, e: IOException) {
-                Log.e("API", "Send serial failed: $e")
-                callback(null)
-            }
-
-            override fun onResponse(call: okhttp3.Call, response: Response) {
-                val result = response.body?.string()
-                Log.d("API", "Response: $result")
-
-                try {
-                    val jsonObj = JSONObject(result)
-                    val authMode = jsonObj.getInt("authMode")
-                    callback(authMode)
-                } catch (e: Exception) {
-                    Log.e("API", "Parse error: $e")
-                    callback(null)
-                }
-            }
-        })
-    }*/
 
     // 共通変数を定義
     companion object {
@@ -136,6 +41,15 @@ class TopActivity : AppCompatActivity() {
 
     // 認証失敗後の再試行フラグ
     private var pendingFaceAndVeinRetry = false
+
+    // Flow3 (Face+Vein) における顔認証結果のキャッシュ。
+    // 静脈認証完了後に結果画面（VeinResultActivity）で表示するために使用します。
+    private var faceResultName: String? = null
+    private var faceResultId: String? = null
+    // ★ Bug2修正: 単一の名前変数から、ID→名前の対応マップに変更。
+    // 顔認証でTop1の名前だけを保持する不具合を解決する。
+    // 静脈認証後、実際にスキャンしたユーザーIDをキーに正確な名前を引き出す。
+    private val faceCandidateMap: HashMap<String, String> = HashMap()
 
     // BodyCamera Service 接続管理
     private val mConnection =
@@ -240,9 +154,9 @@ class TopActivity : AppCompatActivity() {
             
             Log.d(TAG, "Result received via Intent: Name=$resultName, ID=$resultID, Candidates=${candidateList?.size}")
             
-            // If we have a candidate list, we might want to trigger Vein Auth immediately if in Face+Vein mode
-            // usage: if (candidateList != null) ...
-            
+                // 候補リストがある場合、顔＋静脈モードで静脈認証を即時起動するロジックを追加可能（必要に応じて拡張）
+            // 例: if (candidateList != null) { launchPalmSecure(..., candidateList) }
+
             forwardFaceResultToVeinResultWithDetails(status, message, resultName, resultID, similarity)
         }
     }
@@ -282,6 +196,10 @@ class TopActivity : AppCompatActivity() {
         btnVein.setOnClickListener {
             saveAuthMode("Vein")
             saveFaceResultPending(false)
+            // ★ 前回の顔認証キャッシュをリセット（名前・IDの引き継ぎ漏れ防止）
+            faceResultName = null
+            faceResultId = null
+            faceCandidateMap.clear() // Bug2修正: ID→名前マップもリセット
             launchPalmSecure("identify", null, true, true, true)
         }
 
@@ -302,13 +220,18 @@ class TopActivity : AppCompatActivity() {
         Log.i(TAG, "launchFaceRecognition: Switching to Internal NewFaceAuthActivity")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
 
-        // Read use_topk setting from SharedPreferences — allows dynamic switching via Settings
+        // SharedPreferences からクラウド/ローカル認証の設定を取得し、Top-Kモードを判定
         val isFlow3 = currentAuthMode() == "FaceAndVein"
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
+
+        // フロー3（顔＋静脈）はローカルモード時のみTop-Kを使用
         val shouldUseTopK = if (isFlow3) {
-            getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
-                .getBoolean(SettingsActivity.KEY_USE_TOPK, false)
-        } else false
-        Log.d(TAG, "Launch Policy: Flow3=$isFlow3 → UseTopK=$shouldUseTopK")
+            prefs.getString(SettingsActivity.KEY_FACE_VEIN_AUTH_METHOD, "cloud") == "local"
+        } else {
+            prefs.getString(SettingsActivity.KEY_FACE_AUTH_METHOD, "cloud") == "local"
+        }
+
+        Log.d(TAG, "起動ポリシー: Flow3=$isFlow3 → UseTopK=$shouldUseTopK")
 
         intent.putExtra("should_use_topk", shouldUseTopK)
         
@@ -317,18 +240,18 @@ class TopActivity : AppCompatActivity() {
     }
 
     /**
-     * 顔認証（Flow1専用）を結果待ちで起動する
-     * - app側が setResult で ResultName / ResultID を返す前提
-     * - TopActivity を finish せず onActivityResult で受け取る
-     */
-    /**
-     * 顔認証（Flow1専用）を結果待ちで起動する
-     * - app側が setResult で ResultName / ResultID を返す前提
-     * - TopActivity を finish せず onActivityResult で受け取る
+     * 顔認証のみ（フロー1専用）を結果待ちで起動します。
+     * - setResult で ResultName / ResultID を受け取る前提
+     * - TopActivity を finish せず onActivityResult で結果を処理します
      */
     private fun launchFaceRecognitionForFaceOnly() {
-        Log.i(TAG, "launchFaceRecognitionForFaceOnly: Switching to Internal NewFaceAuthActivity")
+        Log.i(TAG, "launchFaceRecognitionForFaceOnly: NewFaceAuthActivity を起動（顔認証のみ）")
         val intent = Intent(this, NewFaceAuthActivity::class.java)
+
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
+        val shouldUseTopK = prefs.getString(SettingsActivity.KEY_FACE_AUTH_METHOD, "cloud") == "local"
+        intent.putExtra("should_use_topk", shouldUseTopK)
+        
         startActivityForResult(intent, REQUEST_FACE)
     }
 
@@ -369,7 +292,9 @@ class TopActivity : AppCompatActivity() {
 
     // 全画面メッセージ + 自動でPalmSecure起動（TopActivity非表示）
     private fun showFullScreenMessageAndLaunchPalmSecure(message: String, faceId: String?, candidateList: ArrayList<String>? = null) {
-        val dialog = AlertDialog.Builder(this).setCancelable(false).create()
+        // ハードウェアのバックボタンでキャンセル可能にするため、setCancelable を true に変更します。
+        // こうすることで、ユーザーが意図しない連続スキャンを自由に中断できるようなUXを確保します。
+        val dialog = AlertDialog.Builder(this).setCancelable(true).create()
 
         val view = layoutInflater.inflate(android.R.layout.simple_list_item_1, null)
 
@@ -384,28 +309,41 @@ class TopActivity : AppCompatActivity() {
         }
 
         // ダイアログの背景を設定
-
         view.setBackgroundColor(0xFF000000.toInt()) // 完全な黒背景
 
         dialog.setView(view)
+
+        // ハンドラとRunnableを定義（キャンセル可能な設計：OOPとしてタスクを分離）
+        val transitionHandler = Handler(Looper.getMainLooper())
+        val transitionTask = Runnable {
+            if (dialog.isShowing) {
+                dialog.dismiss()
+                launchPalmSecure(
+                    mode = "verify",
+                    faceId = faceId,
+                    autoStart = true,
+                    returnResult = true,
+                    fromExternal = true,
+                    candidateList = candidateList
+                )
+            }
+        }
+
+        // ユーザーがハードウェアのバックボタンなどでダイアログをキャンセルした場合の処理
+        dialog.setOnCancelListener {
+            Log.d(TAG, "待機ダイアログがキャンセルされました。次の認証ステップ（静脈）を中止します。")
+            transitionHandler.removeCallbacks(transitionTask) // タイマーをクリアしてフローを中断
+        }
+
         dialog.show()
 
-        // 3.5秒後にPalmSecure起動
-        Handler(Looper.getMainLooper())
-            .postDelayed(
-                {
-                    dialog.dismiss()
-                    launchPalmSecure(
-                        mode = "verify",
-                        faceId = faceId,
-                        autoStart = true,
-                        returnResult = true,
-                        fromExternal = true,
-                        candidateList = candidateList
-                    )
-                },
-                2000
-            )
+        // 設定画面から「メッセージ表示の時間設定」を取得。デフォルトは1.0秒（1000ms）です。
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, Context.MODE_PRIVATE)
+        val transitionDelaySec = prefs.getFloat(SettingsActivity.KEY_TRANSITION_DELAY, 1.0f)
+        val delayMs = (transitionDelaySec * 1000).toLong()
+
+        // 遷移タスクを設定された時間後に実行します
+        transitionHandler.postDelayed(transitionTask, delayMs)
     }
 
     // 認証失敗した場合、認証を再実行
@@ -432,6 +370,9 @@ class TopActivity : AppCompatActivity() {
                 // Flow2: 静脈認証のみ
                 saveAuthMode("Vein")
                 saveFaceResultPending(false)
+                // ★ サーバー指示でVein起動時: 前回の顔認証キャッシュをリセット（名前・IDの漏れ防止）
+                faceResultName = null
+                faceResultId = null
                 launchPalmSecure(
                     mode = "identify",
                     faceId = null,
@@ -479,6 +420,52 @@ class TopActivity : AppCompatActivity() {
             .apply()
     }
 
+    /**
+     * VeinResultActivity.btnFinish が FLAG_ACTIVITY_SINGLE_TOP + CLEAR_TOP で戻ってきたとき呼ばれる。
+     * is_auto_loop_continue = true の場合、設定に従って次の認証を自動開始する。
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("is_auto_loop_continue", false)) {
+            triggerAutoLoop()
+        }
+    }
+
+    private fun triggerAutoLoop() {
+        val prefs = getSharedPreferences(SettingsActivity.PREFS_NAME, MODE_PRIVATE)
+        val autoMethod = prefs.getString(SettingsActivity.KEY_AUTO_AUTH_METHOD, "none") ?: "none"
+        Log.d(TAG, "★ Auto-loop triggered: method=$autoMethod")
+
+        // ★ SurfaceFlingerとカメラハードウェアの解放時間を確保するための1000ms遅延処理
+        // 設定表示時間が「0秒」や「1秒」と極端に短い場合、連続でActivityが破壊・再構築され、
+        // アプリがクラッシュ（crack）する問題を防ぎます。OOP設計に基づき安全な再起動を保証します。
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            when (autoMethod) {
+                "face" -> {
+                    saveAuthMode("Face")
+                    saveFaceResultPending(true)
+                    launchFaceRecognitionForFaceOnly()
+                }
+                "vein" -> {
+                    saveAuthMode("Vein")
+                    saveFaceResultPending(false)
+                    // ★ Auto-Loop時: 前回の顔認証キャッシュをリセット（名前・IDの引き継ぎ漏れ防止）
+                    faceResultName = null
+                    faceResultId = null
+                    faceCandidateMap.clear() // Bug2修正: ID→名前マップもリセット
+                    launchPalmSecure("identify", null, autoStart = true, returnResult = true, fromExternal = true)
+                }
+                "both" -> {
+                    saveAuthMode("FaceAndVein")
+                    saveFaceResultPending(false)
+                    launchFaceRecognition()
+                }
+                else -> Log.d(TAG, "Auto-loop: mode=none, no auto-restart")
+            }
+        }, 1000) // ★ 1秒のハードウェアクールダウン（UI遅延ではありません）
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
@@ -502,14 +489,35 @@ class TopActivity : AppCompatActivity() {
                 // 結果画面へ遷移
                 val intent =
                     Intent(this, VeinResultActivity::class.java).apply {
-                        putExtra(
-                            VeinResultActivity.EXTRA_VEIN_RESULT,
-                            if (resultStr == "OK") "OK" else "NG"
-                        )
+                        val isSuccess = (resultStr == "OK")
+                        putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, if (isSuccess) "OK" else "NG")
                         putExtra(VeinResultActivity.EXTRA_VEIN_ID, userIdStr)
                         putExtra(VeinResultActivity.EXTRA_AUTH_MODE, currentAuthMode())
                         putExtra(VeinResultActivity.EXTRA_NOT_REGISTERED, notRegistered)
                         putExtra(VeinResultActivity.EXTRA_NO_VEIN_DATA, noVeinData)
+
+                        // ★ 顔認証時の氏名はFlow3(FaceAndVein)の場合のみ引き継ぎます。
+                        // Flow2(Vein Only)では顔認証キャッシュが残っていても絶対に渡しません。
+                        val isVeinOnlyMode = (currentAuthMode() == "Vein")
+                        if (!isVeinOnlyMode) {
+                            // ★ Bug2修正: Vein認証で得たIDをキーにマップから正確な名前を引き出す。
+                            // 顔認証のTop1名（faceResultName）を流用する不具合を修正する。
+                            val resolvedName: String? = if (userIdStr != null && faceCandidateMap.containsKey(userIdStr)) {
+                                Log.d(TAG, "★ [] IDマップから名前を解決: ID=$userIdStr → Name=${faceCandidateMap[userIdStr]}")
+                                faceCandidateMap[userIdStr]
+                            } else {
+                                Log.w(TAG, "★ [] IDマップに該当なし (ID=$userIdStr)。フォールバック: faceResultName=$faceResultName")
+                                faceResultName
+                            }
+                            if (resolvedName != null) {
+                                putExtra("ResultName", resolvedName)
+                            }
+                        }
+                        if (userIdStr != null) {
+                            putExtra("ResultID", userIdStr) // 静脈IDを優先
+                        } else if (!isVeinOnlyMode && faceResultId != null) {
+                            putExtra("ResultID", faceResultId)
+                        }
                     }
                 startActivity(intent)
                 overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示
@@ -530,6 +538,11 @@ class TopActivity : AppCompatActivity() {
                 val resultId = data.getStringExtra("ResultID")
                 val similarity = data.getStringExtra("ResultSimilarity")
 
+                // ★ デバッグ用：Face認証(Local/Cloud)からの生データをログ出力して確認します。
+                Log.d(TAG, "★ [デバッグ] OnActivityResult REQUEST_FACE:")
+                Log.d(TAG, "  → status=$status, message=$message")
+                Log.d(TAG, "  → resultName=$resultName, resultId=$resultId")
+
                 val mode = currentAuthMode()
                 if (mode == "FaceAndVein") {
                     if (status == 2) {
@@ -538,27 +551,53 @@ class TopActivity : AppCompatActivity() {
                         Log.d(TAG, "═══════════════════════════════════════════")
                         Log.d(TAG, "★ [Flow3] 顔認証結果受信")
                         Log.d(TAG, "  Status=$status, Name=$resultName, ID=$resultId")
-                        Log.d(TAG, "  Similarity=$similarity")
-                        Log.d(TAG, "  CandidateList: ${candidateList?.size ?: 0} 人")
+                        
+                        // キャッシュを更新
+                        faceResultName = resultName
+                        faceResultId = resultId
+                        
+                        Log.d(TAG, "★ [Flow3] 候補リスト: ${candidateList?.size ?: 0} 人")
                         candidateList?.forEachIndexed { i, id ->
                             Log.d(TAG, "    Candidate[$i]: $id")
                         }
+
+                        // ★ Bug2修正: 候補名リスト受信とID→名前マップの構築
+                        val candidateNamesList = data.getStringArrayListExtra("candidate_names")
+                        faceCandidateMap.clear()
+                        if (candidateList != null && candidateNamesList != null && candidateList.size == candidateNamesList.size) {
+                            candidateList.forEachIndexed { i, id ->
+                                faceCandidateMap[id] = candidateNamesList[i]
+                            }
+                            Log.d(TAG, "★ [] faceCandidateMap 構築完了: $faceCandidateMap")
+                        } else {
+                            Log.w(TAG, "★ [] candidate_names未受信 or サイズ不一致 → マップ不可")
+                        }
                         Log.d(TAG, "═══════════════════════════════════════════")
                         if (candidateList != null && candidateList.isNotEmpty()) {
-                            Log.d(TAG, "★ [Flow3] TopK → PalmSecure起動 (${candidateList.size}人)")
-                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了 (TopK)\n手をかざしてください", null, candidateList)
+                            Log.d(TAG, "★ [Flow3] TopK (Local) → PalmSecure起動 (${candidateList.size}人)")
+                            // ★ローカル認証 (TopK) であることを明示します
+                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了 (Local)\n手をかざしてください", null, candidateList)
                         } else {
-                            Log.d(TAG, "★ [Flow3] Legacy → PalmSecure起動 (faceId=$resultId)")
-                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました\n手をかざしてください", resultId, null)
+                            Log.d(TAG, "★ [Flow3] Legacy (Cloud) → PalmSecure起動 (faceId=$resultId)")
+                            // ★クラウド/レガシー認証であることを明示します
+                            showFullScreenMessageAndLaunchPalmSecure("顔認証完了しました (Cloud)\n手をかざしてください", resultId, null)
                         }
                     } else {
                         // Flow3: 顔認証失敗 → 直接結果画面へ（再試行ボタン付き）
                         val intent = Intent(this, VeinResultActivity::class.java).apply {
-                            putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, "NG")
-                            putExtra(VeinResultActivity.EXTRA_VEIN_ID, resultId)
+                            putExtra(VeinResultActivity.EXTRA_VEIN_RESULT, "NG") // 失敗時はNG固定
+                            putExtra(VeinResultActivity.EXTRA_VEIN_ID, resultId) // 顔認証のIDをセット
                             putExtra(VeinResultActivity.EXTRA_AUTH_MODE, "FaceAndVein")
-                            putExtra("ResultName", resultName)
-                            putExtra("ResultID", resultId)
+                            
+                            // 顔認証時の氏名とIDがあれば引き継ぎます
+                            if (faceResultName != null) {
+                                putExtra("ResultName", faceResultName)
+                            }
+                            if (resultId != null) { // 静脈IDの代わりに顔認証IDを優先
+                                putExtra("ResultID", resultId) 
+                            } else if (faceResultId != null) {
+                                putExtra("ResultID", faceResultId)
+                            }
                         }
                         startActivity(intent)
                         overridePendingTransition(0, 0) // アニメーションなし: 結果画面を即座に表示

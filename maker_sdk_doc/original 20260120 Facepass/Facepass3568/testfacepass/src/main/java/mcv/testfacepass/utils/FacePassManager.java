@@ -25,11 +25,12 @@ public class FacePassManager {
     private static final String RG_DEBUG_TAG = "RecognizeDemo";
     public boolean isInitFinished = false;
 
-    public static final String FILE_ROOT_PATH = "/sdcard/Download";
+    public static String FILE_ROOT_PATH = ""; // ★ Sửa Scoped Storage: Khởi tạo linh hoạt ở init()
 
     /* 人脸识别Group */
     public static String group_name = "facepass";
     public static float LIVENESS_THRESHOLD = 88f; // 原始值: 单目推荐80, 双目推荐88
+    public static int FACE_MIN_THRESHOLD = 25; // 初期値は最小(2m)に設定。FacePassActivityの手動フィルタリングで制限を行う。
 
     public static Boolean isLocalGroupExist = false;
     private ProgressDialog progressDialog;
@@ -79,11 +80,21 @@ public class FacePassManager {
     }
 
     public void init(final Context context) {
+        // SDKが既に初期化済みの場合は何もしない（ダイアログも出さない）
+        if (mFacePassHandler != null && isInitFinished) {
+            Log.d(DEBUG_TAG, "FacePassManager.init: SDK is already initialized and finished. Skipping.");
+            return;
+        }
+
         // 创建并显示加载对话框
-        progressDialog = new ProgressDialog(context);
-        progressDialog.setMessage("SDKを初期化中...");
-        progressDialog.setCancelable(false); // 不可取消
-        progressDialog.show();
+        try {
+            progressDialog = new ProgressDialog(context);
+            progressDialog.setMessage("SDKを初期化中...");
+            progressDialog.setCancelable(false); // 不可取消
+            progressDialog.show();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
 
 
 
@@ -110,7 +121,8 @@ public class FacePassManager {
     }
 
     private boolean initFacePassSDK(Context context) throws IOException {
-        modelsPath = context.getExternalFilesDir(null).getAbsolutePath() + "/models";
+        FILE_ROOT_PATH = context.getExternalFilesDir(null).getAbsolutePath(); // ★ Tuân thủ Android 11 Scoped Storage
+        modelsPath = FILE_ROOT_PATH + "/models";
         FACE_ALGOMALL_CERT_PATH = modelsPath + "/facepass_test.cert";
         if (!new File(FACE_ALGOMALL_CERT_PATH).exists()) {
             FileUtil.copyAssetsToInternal(context, "models", modelsPath);
@@ -270,9 +282,9 @@ public class FacePassManager {
                         /* 送识别阈值参数 */
                         config.searchThreshold = 75f;
                         config.livenessThreshold = LIVENESS_THRESHOLD;
-                        config.faceMinThreshold = 100;
-                        config.poseThreshold = new FacePassPose(45f, 45f, 45);
-                        config.blurThreshold = 0.8f;
+                        config.faceMinThreshold = FACE_MIN_THRESHOLD;
+                        config.poseThreshold = new FacePassPose(90f, 90f, 90f); // 2m対応のため緩和 (45f -> 90f)
+                        config.blurThreshold = 0.98f; // 2m対応のため緩和 (0.7f -> 0.98f)
                         config.lowBrightnessThreshold = 30f;
                         config.highBrightnessThreshold = 210f;
                         config.brightnessSTDThreshold = 80f;

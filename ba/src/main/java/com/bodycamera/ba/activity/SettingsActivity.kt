@@ -16,11 +16,29 @@ import com.bodycamera.tests.R
  */
 class SettingsActivity : AppCompatActivity() {
 
-    // Layout and Preference keys
+    // ビュー参照（テキストフィールド・ラジオグループ）
     private lateinit var etServerUrl: EditText
     private lateinit var etDeviceId: EditText
     private lateinit var etLivenessThreshold: EditText
-    private lateinit var cbUseTopK: android.widget.CheckBox // Added
+    private lateinit var rgIdentDistance: android.widget.RadioGroup
+
+    // 自動認証グループ（グリッドレイアウト用：RadioGroup未使用のため手動排他制御）
+    private lateinit var rbAutoNone: android.widget.RadioButton
+    private lateinit var rbAutoFace: android.widget.RadioButton
+    private lateinit var rbAutoVein: android.widget.RadioButton
+    private lateinit var rbAutoBoth: android.widget.RadioButton
+
+    // 顔認証・顔＋静脈認証の認証方法選択グループ
+    private lateinit var rgFaceAuthMethod: android.widget.RadioGroup
+    private lateinit var rgFaceVeinAuthMethod: android.widget.RadioGroup
+
+    private lateinit var etTopK: EditText
+    private lateinit var etRecognitionThreshold: EditText
+
+    // 待機時間設定 (秒単位で入力)
+    private lateinit var etTransitionDelay: EditText
+    private lateinit var etAutoCloseDelay: EditText
+
     private lateinit var btnSave: Button
     private lateinit var prefs: SharedPreferences
 
@@ -28,8 +46,19 @@ class SettingsActivity : AppCompatActivity() {
         const val PREFS_NAME = "BodyCameraPrefs"
         const val KEY_SERVER_URL = "server_url"
         const val KEY_DEVICE_ID = "device_id"
-        const val KEY_USE_TOPK = "use_topk" // Added
         const val KEY_LIVENESS_THRESHOLD = "liveness_threshold"//なりまし防止スコア
+        const val KEY_IDENT_DISTANCE = "ident_distance" // 距離設定 (0, 1, 2, 3 corresponding to 0.5m, 1m, 1.5m, 2m)
+        
+        const val KEY_AUTO_AUTH_METHOD = "auto_auth_method" // none, face, vein, both
+        const val KEY_FACE_AUTH_METHOD = "face_auth_method" // cloud, local
+        const val KEY_FACE_VEIN_AUTH_METHOD = "face_vein_auth_method" // cloud, local
+        const val KEY_TOP_K = "top_k_count"
+        const val KEY_RECOGNITION_THRESHOLD = "recognition_threshold"
+        const val KEY_LIVENESS_MODE = "liveness_mode" // on, off
+
+        // 待機時間用のキー (Float: 秒単位)
+        const val KEY_TRANSITION_DELAY = "transition_delay_sec"
+        const val KEY_AUTO_CLOSE_DELAY = "auto_close_delay_sec"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,48 +70,148 @@ class SettingsActivity : AppCompatActivity() {
         etServerUrl = findViewById(R.id.etServerUrl)
         etDeviceId = findViewById(R.id.etDeviceId)
         etLivenessThreshold = findViewById(R.id.etLivenessThreshold)
-        cbUseTopK = findViewById(R.id.cbUseTopK) // Added
+        rgIdentDistance = findViewById(R.id.rgIdentDistance)
+        
+        rbAutoNone = findViewById(R.id.rbAutoNone)
+        rbAutoFace = findViewById(R.id.rbAutoFace)
+        rbAutoVein = findViewById(R.id.rbAutoVein)
+        rbAutoBoth = findViewById(R.id.rbAutoBoth)
+        
+        rgFaceAuthMethod = findViewById(R.id.rgFaceAuthMethod)
+        rgFaceVeinAuthMethod = findViewById(R.id.rgFaceVeinAuthMethod)
+        
+        etTopK = findViewById(R.id.etTopK)
+        etRecognitionThreshold = findViewById(R.id.etRecognitionThreshold)
+
+        etTransitionDelay = findViewById(R.id.etTransitionDelay)
+        etAutoCloseDelay = findViewById(R.id.etAutoCloseDelay)
+
         btnSave = findViewById(R.id.btnSave)
+
+        // グリッド内RadioButtonの排他制御を設定（RadioGroup未使用のため手動管理）
+        setupAutoAuthRadioLogic()
 
         loadSettings()
 
         btnSave.setOnClickListener { saveSettings() }
     }
 
-    private fun loadSettings() {
-        val url = prefs.getString(KEY_SERVER_URL, "")
-        val deviceId = prefs.getString(KEY_DEVICE_ID, "")
-        val useTopK = prefs.getBoolean(KEY_USE_TOPK, false) // Default false
-        val livenessThreshold = prefs.getFloat(KEY_LIVENESS_THRESHOLD, 88.0f)
+    private fun setupAutoAuthRadioLogic() {
+        rbAutoNone.setOnCheckedChangeListener { _, isChecked -> if (isChecked) { rbAutoFace.isChecked = false; rbAutoVein.isChecked = false; rbAutoBoth.isChecked = false } }
+        rbAutoFace.setOnCheckedChangeListener { _, isChecked -> if (isChecked) { rbAutoNone.isChecked = false; rbAutoVein.isChecked = false; rbAutoBoth.isChecked = false } }
+        rbAutoVein.setOnCheckedChangeListener { _, isChecked -> if (isChecked) { rbAutoNone.isChecked = false; rbAutoFace.isChecked = false; rbAutoBoth.isChecked = false } }
+        rbAutoBoth.setOnCheckedChangeListener { _, isChecked -> if (isChecked) { rbAutoNone.isChecked = false; rbAutoFace.isChecked = false; rbAutoVein.isChecked = false } }
+    }
 
-        etServerUrl.setText(url)
-        etDeviceId.setText(deviceId)
-        etLivenessThreshold.setText(livenessThreshold.toString())
-        cbUseTopK.isChecked = useTopK // Added
+    private fun loadSettings() {
+        // テキストフィールドに保存済みの値を反映
+        etServerUrl.setText(prefs.getString(KEY_SERVER_URL, ""))
+        etDeviceId.setText(prefs.getString(KEY_DEVICE_ID, ""))
+        etLivenessThreshold.setText(prefs.getFloat(KEY_LIVENESS_THRESHOLD, 88.0f).toString())
+        etTopK.setText(prefs.getInt(KEY_TOP_K, 1).toString())
+        etRecognitionThreshold.setText(prefs.getFloat(KEY_RECOGNITION_THRESHOLD, 60.0f).toString())
+
+        // 待機時間の読み込み (デフォルト値: 遷移 1.0s, 自動終了 2.0s)
+        etTransitionDelay.setText(prefs.getFloat(KEY_TRANSITION_DELAY, 1.0f).toString())
+        etAutoCloseDelay.setText(prefs.getFloat(KEY_AUTO_CLOSE_DELAY, 2.0f).toString())
+
+        // 識別距離の設定を反映（0=0.5m, 1=1m, 2=1.5m, 3=2m）
+        when (prefs.getInt(KEY_IDENT_DISTANCE, 1)) {
+            0 -> findViewById<android.widget.RadioButton>(R.id.rbDist05).isChecked = true
+            1 -> findViewById<android.widget.RadioButton>(R.id.rbDist10).isChecked = true
+            2 -> findViewById<android.widget.RadioButton>(R.id.rbDist15).isChecked = true
+            3 -> findViewById<android.widget.RadioButton>(R.id.rbDist20).isChecked = true
+        }
+
+        // 自動認証方法の設定を反映
+        when (prefs.getString(KEY_AUTO_AUTH_METHOD, "none")) {
+            "none" -> rbAutoNone.isChecked = true
+            "face" -> rbAutoFace.isChecked = true
+            "vein" -> rbAutoVein.isChecked = true
+            "both" -> rbAutoBoth.isChecked = true
+            else -> rbAutoNone.isChecked = true
+        }
+
+        // 顔認証方法（クラウド/ローカル）の設定を反映
+        if (prefs.getString(KEY_FACE_AUTH_METHOD, "cloud") == "local") {
+            findViewById<android.widget.RadioButton>(R.id.rbFaceLocal).isChecked = true
+        } else {
+            findViewById<android.widget.RadioButton>(R.id.rbFaceCloud).isChecked = true
+        }
+
+        // 顔と静脈認証方法（クラウド/ローカル）の設定を反映
+        if (prefs.getString(KEY_FACE_VEIN_AUTH_METHOD, "cloud") == "local") {
+            findViewById<android.widget.RadioButton>(R.id.rbFaceVeinLocal).isChecked = true
+        } else {
+            findViewById<android.widget.RadioButton>(R.id.rbFaceVeinCloud).isChecked = true
+        }
+
+        // ライブネスモード（写真判別ON/OFF）の設定を反映
+        if (prefs.getString(KEY_LIVENESS_MODE, "off") == "off") {
+            findViewById<android.widget.RadioButton>(R.id.rbLivenessOff).isChecked = true
+        } else {
+            findViewById<android.widget.RadioButton>(R.id.rbLivenessOn).isChecked = true
+        }
     }
 
     private fun saveSettings() {
         val url = etServerUrl.text.toString().trim()
         val deviceId = etDeviceId.text.toString().trim()
-        val useTopK = cbUseTopK.isChecked // Added
-        val livenessStr = etLivenessThreshold.text.toString()
-        val livenessVal = if (livenessStr.isEmpty()) 88.0f else livenessStr.toFloat()
-
+        
+        // 入力バリデーション
         if (url.isEmpty()) {
             etServerUrl.error = "サーバーURLを入力してください"
             return
         }
-
         if (deviceId.isEmpty()) {
             etDeviceId.error = "デバイスIDを入力してください"
             return
         }
 
+        // 数値フィールドのパース（不正値はデフォルト値を使用）
+        val livenessVal = etLivenessThreshold.text.toString().toFloatOrNull() ?: 88.0f
+        val topKVal = etTopK.text.toString().toIntOrNull() ?: 1
+        val recogThresholdVal = etRecognitionThreshold.text.toString().toFloatOrNull() ?: 60.0f
+
+        // 識別距離のインデックスを取得
+        val identDistIndex = when (rgIdentDistance.checkedRadioButtonId) {
+            R.id.rbDist05 -> 0
+            R.id.rbDist10 -> 1
+            R.id.rbDist15 -> 2
+            R.id.rbDist20 -> 3
+            else -> 1
+        }
+        
+        val autoAuthMethod = when {
+            rbAutoFace.isChecked -> "face"
+            rbAutoVein.isChecked -> "vein"
+            rbAutoBoth.isChecked -> "both"
+            else -> "none"
+        }
+        
+        // 顔認証・顔＋静脈認証の認証方法を取得
+        val faceAuthMethod = if (rgFaceAuthMethod.checkedRadioButtonId == R.id.rbFaceLocal) "local" else "cloud"
+        val faceVeinAuthMethod = if (rgFaceVeinAuthMethod.checkedRadioButtonId == R.id.rbFaceVeinLocal) "local" else "cloud"
+
+        // SharedPreferences への一括保存
         prefs.edit().apply {
             putString(KEY_SERVER_URL, url)
             putString(KEY_DEVICE_ID, deviceId)
-            putBoolean(KEY_USE_TOPK, useTopK) // Added
             putFloat(KEY_LIVENESS_THRESHOLD, livenessVal)
+            putInt(KEY_IDENT_DISTANCE, identDistIndex)
+            putString(KEY_AUTO_AUTH_METHOD, autoAuthMethod)
+            putString(KEY_FACE_AUTH_METHOD, faceAuthMethod)
+            putString(KEY_FACE_VEIN_AUTH_METHOD, faceVeinAuthMethod)
+            putInt(KEY_TOP_K, topKVal)
+            putFloat(KEY_RECOGNITION_THRESHOLD, recogThresholdVal)
+
+            // 待機時間設定の保存 (Float: 秒単位)
+            putFloat(KEY_TRANSITION_DELAY, etTransitionDelay.text.toString().toFloatOrNull() ?: 1.0f)
+            putFloat(KEY_AUTO_CLOSE_DELAY, etAutoCloseDelay.text.toString().toFloatOrNull() ?: 2.0f)
+            
+            val livenessMode = if (findViewById<android.widget.RadioGroup>(R.id.rgLivenessMode).checkedRadioButtonId == R.id.rbLivenessOff) "off" else "on"
+            putString(KEY_LIVENESS_MODE, livenessMode)
+            
             apply()
         }
 

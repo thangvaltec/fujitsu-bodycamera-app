@@ -152,6 +152,17 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
     private static final String ACTION_PROCESS_FACE = "com.bodycamera.ba.ACTION_PROCESS_FACE";
     private static final String ACTION_AUTH_RESULT = "com.bodycamera.ba.ACTION_AUTH_RESULT";
     private boolean mIsVerifying = false; // API応答待ち中はスキャンを一時停止するフラグ
+    private boolean mPendingFinish = false; // ★ UI kẹt 0s Fix: Cờ chờ đóng màn hình an toàn
+
+    private void safeFinish() {
+        if (hasWindowFocus()) {
+            Log.d(DEBUG_TAG, "★ safeFinish: Window has focus. Finishing immediately.");
+            finish();
+        } else {
+            Log.w(DEBUG_TAG, "★ safeFinish: Window NOT focused yet! Postponing finish() to prevent rapid transition crash.");
+            mPendingFinish = true;
+        }
+    }
 
     private final android.content.BroadcastReceiver authReceiver = new android.content.BroadcastReceiver() {
         @Override
@@ -182,7 +193,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                         mErrorToast = null;
                     }
                     // Toast.makeText(FacePassActivity.this, "Authentication Success", Toast.LENGTH_SHORT).show();
-                    finish(); // Maker App終了、以降はMain Appが処理する
+                    safeFinish(); // Maker App終了、以降はMain Appが処理する
                 } else {
                     // 認証失敗 → リトライ
                     String displayMsg = message != null ? message : "Verification Failed";
@@ -250,6 +261,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
 
     private boolean mUseTopKMode = false; // Flag to enable TopK flow
+    private int mTopKCount = 1;
+    private float mRecognizeThreshold = 60.0f;
+    private boolean mLivenessEnabled = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -264,9 +278,19 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mDeviceId = intent.getStringExtra("device_id");
             mPoliceId = intent.getStringExtra("police_id");
             mUseTopKMode = intent.getBooleanExtra("should_use_topk", false);
+            mTopKCount = intent.getIntExtra("top_k_count", 1);
+            mRecognizeThreshold = intent.getFloatExtra("recognition_threshold", 60.0f);
+            
             float threshold = intent.getFloatExtra("liveness_threshold", 88.0f);
             FacePassManager.LIVENESS_THRESHOLD = threshold; // Apply global setting
-            Log.d(DEBUG_TAG, "★  パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThreshold=" + threshold);
+            
+            mLivenessEnabled = intent.getBooleanExtra("liveness_enabled", true);
+            ComplexFrameHelper.isLivenessEnabled = mLivenessEnabled;
+            
+            int faceMinThreshold = intent.getIntExtra("face_min_threshold", 100);
+            FacePassManager.FACE_MIN_THRESHOLD = faceMinThreshold;
+            
+            Log.d(DEBUG_TAG, "★ パラメータ受信: URL=" + mServerUrl + ", DeviceID=" + mDeviceId + ", UseTopK=" + mUseTopKMode + ", LivenessThresh=" + threshold + ", LivenessEnabled=" + mLivenessEnabled + ", FaceMinThresh=" + faceMinThreshold + ", TopKCount=" + mTopKCount + ", RecogThresh=" + mRecognizeThreshold);
         }
 
         /* 初始化界面 */
@@ -287,14 +311,25 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
         dbHelper = new DatabaseHelper(this);
 
-        // 修正: 認証画面から直接起動された場合のSDK遅延初期化
+        // SDKの遅延初期化または設定更新
         if (FacePassManager.mFacePassHandler == null) {
             Log.e(DEBUG_TAG, "!!! SDK not initialized. Initializing now from onCreate... !!!");
             FacePassManager.getInstance().init(this);
         } else {
-            Log.d(DEBUG_TAG, "SDK already initialized. Handler: " + FacePassManager.mFacePassHandler);
+            Log.d(DEBUG_TAG, "SDK already initialized. Updating config...");
+            // SDKが既に初期化されている場合、現在の設定（Liveness ON/OFF）をアルゴリズムに反映させる
+            try {
+                FacePassConfig config = FacePassManager.mFacePassHandler.getConfig();
+                if (config != null) {
+                    config.rgbIrLivenessEnabled = mLivenessEnabled;
+                    FacePassManager.mFacePassHandler.setConfig(config);
+                    Log.d(DEBUG_TAG, "SDK Config updated: rgbIrLivenessEnabled=" + mLivenessEnabled);
+                }
+            } catch (Exception e) {
+                Log.e(DEBUG_TAG, "Error updating SDK config: " + e.getMessage());
+                e.printStackTrace();
+            }
             Log.d(DEBUG_TAG, "InitFinished State: " + FacePassManager.getInstance().isInitFinished);
-            Log.d(DEBUG_TAG, "Group Status: isLocalGroupExist=" + FacePassManager.isLocalGroupExist);
         }
     }
 
@@ -310,7 +345,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
         /* 打开相机 */
         if (hasPermission()) {
             manager.open(getWindowManager(), false, cameraWidth, cameraHeight);
-            mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+            if (mLivenessEnabled) {
+                mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+            } else {
+                Log.d(DEBUG_TAG, "★ Liveness disabled: Skipping IR camera open.");
+            }
         } else {
             requestPermission();
         }
@@ -362,7 +401,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 // Permissions granted, initialize SDK if needed or open camera
                 if (manager != null) {
                     manager.open(getWindowManager(), false, cameraWidth, cameraHeight);
-                    mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+                    if (mLivenessEnabled) {
+                        mIRCameraManager.open(getWindowManager(), true, cameraWidth, cameraHeight);
+                    }
                 }
                 
                 // Also retry init if it was skipped
@@ -422,8 +463,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 /* 将每一帧FacePassImage 送入SDK算法， 并得到返回结果 */
                 FacePassTrackResult detectionResult = null;
                 try {
-                    FacePassConfig cfg = FacePassManager.mFacePassHandler.getConfig();
-                    if (cfg.rgbIrLivenessEnabled) {
+                    if (mLivenessEnabled) {
                         FacePassImage imageRGB = new FacePassImage(framePair.first.nv21Data, framePair.first.width, framePair.first.height, cameraRotation, FacePassImageType.NV21);
                         FacePassImage imageIR = new FacePassImage(framePair.second.nv21Data, framePair.second.width, framePair.second.height, cameraRotation, FacePassImageType.NV21);
                         detectionResult = FacePassManager.mFacePassHandler.feedFrameRGBIR(imageRGB, imageIR);
@@ -436,89 +476,81 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     continue;
                 }
 
+                    /* ★ 手動距離フィルタリング (Identification Distance Setting) 
+                     * SDKの初期化設定(FaceMinThreshold)はシングルトン保持のため、実行時に動的に変更できない場合がある。
+                     * そのため、SDKから返された結果をこちらで手動でフィルタリングし、設定より遠い（小さい）顔を無視する。
+                     * 注意：SDKが返した detectionResult の配列（images, trackedFaces）を直接書き換えると、
+                     * JNI層のメモリ参照が壊れ Liveness 判定が失敗 (-1.0) するため、論理的なフィルタリングのみを行う。
+                     */
+                    java.util.List<FacePassTrackedFace> visibleFaces = new java.util.ArrayList<>();
+                    boolean hasAcceptableFace = false;
+                    
+                    if (detectionResult == null) continue;
 
-                if (detectionResult == null || detectionResult.trackedFaces.length == 0) {
-                    /* 当前帧没有检出人脸 */
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            faceView.clear();
-                            faceView.invalidate();
-                        }
-                    });
-                } else {
-                    /* 将识别到的人脸在预览界面中圈出，并在上方显示人脸位置及角度信息 */
-                    final FacePassTrackedFace[] bufferFaceList = detectionResult.trackedFaces;
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (faceView != null) {
-                                faceView.setVisibility(View.VISIBLE);
-                                showFacePassFace(bufferFaceList);
-                            }
-                        }
-                    });
-                }
+                    if (detectionResult.trackedFaces != null) {
+                        for (FacePassTrackedFace face : detectionResult.trackedFaces) {
+                            int faceWidth = (int) (face.rect.right - face.rect.left);
+                            int faceHeight = (int) (face.rect.bottom - face.rect.top);
+                            int faceSize = Math.max(faceWidth, faceHeight);
 
-                if (FacePassManager.SDK_MODE == FacePassManager.FacePassSDKMode.MODE_OFFLINE) {
-//                    Log.d(DEBUG_TAG, "detectionResult.message.length = " + detectionResult.message.length);
-                    /*离线模式，将识别到人脸的，message不为空的result添加到处理队列中*/
-                    if (detectionResult != null) {
-                        /*所有检测到的人脸框的属性信息*/
-                        for (int i = 0; i < detectionResult.trackedFaces.length; ++i) {
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isBlurPassed) {
-                                Log.d(FD_DEBUG_TAG, "BlurScore = " + detectionResult.trackedFaces[i].quality.blur);
+                            boolean isAccepted = faceSize >= FacePassManager.FACE_MIN_THRESHOLD;
+                            if (isAccepted) {
+                                visibleFaces.add(face);
+                                hasAcceptableFace = true;
                             }
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isBrightnessPassd) {
-                                Log.d(FD_DEBUG_TAG, "BrightnessScore = " + detectionResult.trackedFaces[i].quality.brightness);
-                                Log.d(FD_DEBUG_TAG, "DeviationScore = " + detectionResult.trackedFaces[i].quality.deviation);
-                            }
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isEdgefacePassed) {
-                                Log.d(FD_DEBUG_TAG, "EdgefacePassedScore = " + detectionResult.trackedFaces[i].quality.edgefaceComp);
-                            }
-                            if (!detectionResult.trackedFaces[i].quality.facePassQualityCheck.isYawPassed ||
-                                    !detectionResult.trackedFaces[i].quality.facePassQualityCheck.isPitchPassed ||
-                                    !detectionResult.trackedFaces[i].quality.facePassQualityCheck.isRollPassed) {
-                                Log.d(FD_DEBUG_TAG, "YawScore = " + detectionResult.trackedFaces[i].quality.pose.yaw);
-                                Log.d(FD_DEBUG_TAG, "PitchScore = " + detectionResult.trackedFaces[i].quality.pose.pitch);
-                                Log.d(FD_DEBUG_TAG, "RollScore = " + detectionResult.trackedFaces[i].quality.pose.roll);
-                            }
-                        }
-                        Log.d(DEBUG_TAG, "--------------------------------------------------------------------------------------------------------------------------------------------------");
-                        if (detectionResult.message.length != 0) {
-                            /*送识别的人脸框的属性信息*/
-                            FacePassTrackOptions[] trackOpts = new FacePassTrackOptions[detectionResult.images.length];
-                            for (int i = 0; i < detectionResult.images.length; ++i) {
-                                if (detectionResult.images[i].rcAttr.respiratorType != FacePassRCAttribute.FacePassRespiratorType.NO_RESPIRATOR) {
-                                    float searchThreshold = 60f;
-                                    float livenessThreshold = FacePassManager.LIVENESS_THRESHOLD; // Use dynamic setting
-                                    trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, searchThreshold, livenessThreshold);
-                                } else {
-                                    // Use global setting for non-mask case as well to ensure consistency
-                                    trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, -1f, FacePassManager.LIVENESS_THRESHOLD);
-                                }
-                                Log.d(DEBUG_TAG, String.format("rc attribute in FacePassImage, hairType: 0x%x beardType: 0x%x hatType: 0x%x respiratorType: 0x%x glassesType: 0x%x skinColorType: 0x%x",
-                                        detectionResult.images[i].rcAttr.hairType.ordinal(),
-                                        detectionResult.images[i].rcAttr.beardType.ordinal(),
-                                        detectionResult.images[i].rcAttr.hatType.ordinal(),
-                                        detectionResult.images[i].rcAttr.respiratorType.ordinal(),
-                                        detectionResult.images[i].rcAttr.glassesType.ordinal(),
-                                        detectionResult.images[i].rcAttr.skinColorType.ordinal()));
-                            }
-                            Log.d(DEBUG_TAG, "mRecognizeDataQueue.offer(mRecData);");
-                            // Pass the NV21 data for potential capture
-                            RecognizeData mRecData = new RecognizeData(detectionResult.message, trackOpts, framePair.first.nv21Data, framePair.first.width, framePair.first.height, startTime);
-                            mDetectResultQueue.offer(mRecData);
-                            Log.d(DEBUG_TAG, " startTime " + startTime);
+                            
+                            Log.d("FaceDistanceDebug", String.format("trackId: %d, size: %d, threshold: %d -> %s", 
+                                face.trackId, faceSize, FacePassManager.FACE_MIN_THRESHOLD, isAccepted ? "ACCEPT" : "REJECT"));
                         }
                     }
-                }
+
+                    /* 1. UI表示の制御: 設定距離内の顔のみ枠を描画する */
+                    if (visibleFaces.isEmpty()) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (faceView != null) {
+                                    faceView.clear();
+                                    faceView.invalidate();
+                                }
+                            }
+                        });
+                    } else {
+                        final FacePassTrackedFace[] bufferFaceList = visibleFaces.toArray(new FacePassTrackedFace[0]);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (faceView != null) {
+                                    faceView.setVisibility(View.VISIBLE);
+                                    showFacePassFace(bufferFaceList);
+                                }
+                            }
+                        });
+                    }
+
+                    /* 2. 認識処理の制御: 設定距離内に顔がある場合のみキューへ追加する */
+                    if (hasAcceptableFace && detectionResult.message.length != 0) {
+                        FacePassTrackOptions[] trackOpts = new FacePassTrackOptions[detectionResult.images.length];
+                        for (int i = 0; i < detectionResult.images.length; ++i) {
+                            if (detectionResult.images[i].rcAttr.respiratorType != FacePassRCAttribute.FacePassRespiratorType.NO_RESPIRATOR) {
+                                float searchThreshold = 60f;
+                                trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, searchThreshold, FacePassManager.LIVENESS_THRESHOLD);
+                            } else {
+                                trackOpts[i] = new FacePassTrackOptions(detectionResult.images[i].trackId, -1f, FacePassManager.LIVENESS_THRESHOLD);
+                            }
+                        }
+                        
+                        RecognizeData mRecData = new RecognizeData(detectionResult.message, trackOpts, framePair.first.nv21Data, framePair.first.width, framePair.first.height, startTime);
+                        mDetectResultQueue.offer(mRecData);
+                        Log.d("FaceDistanceDebug", "Frame offered to queue (Face within distance)");
+                    } else {
+                        // 距離外の場合はキューに追加せずスキップ
+                        if (detectionResult.trackedFaces != null && detectionResult.trackedFaces.length > 0) {
+                           Log.d("FaceDistanceDebug", "Frame rejected (Face too far)");
+                        }
+                    }
                 long endTime = System.currentTimeMillis(); //结束时间
                 long runTime = endTime - startTime;
-                if (detectionResult == null) {
-                    Log.d(DEBUG_TAG, "detectionResult == null");
-                    continue;
-                }
                 for (int i = 0; i < detectionResult.trackedFaces.length; ++i) {
                     Log.i(DEBUG_TAG, "rect[" + i + "] = (" + detectionResult.trackedFaces[i].rect.left + ", " + detectionResult.trackedFaces[i].rect.top + ", " + detectionResult.trackedFaces[i].rect.right + ", " + detectionResult.trackedFaces[i].rect.bottom);
                 }
@@ -562,63 +594,51 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
 
 					///////先活体再recognize
-                        ////////////////////////// live ness test/ FP_REG_MODE_LIVENESS ////////////FP_REG_MODE_LIVENESSTRACK //////////
-                        // Original livenessClassify call
-                        boolean livenessOK = false; // Track if liveness passed for anti-spoof
-                        FacePassLivenessResult[] livenessResult = FacePassManager.mFacePassHandler.livenessClassify(recognizeData.message, recognizeData.trackOpt[0].trackId, FacePassLivenessMode.FP_REG_MODE_LIVENESS, recognizeData.trackOpt[0].livenessThreshold);
-                        if (null != livenessResult && livenessResult.length > 0) {
-                            Log.d(DEBUG_TAG, "FacePassLivenessResult length = " + livenessResult.length);
-                            for (FacePassLivenessResult result : livenessResult) {
-                                String slivenessStat = " Unkonw";
-                                switch (result.livenessState) {
-                                    case 0:
-                                        slivenessStat = "LIVENESS_PASS";
-                                        
-                                        // ★ Score log (printed BEFORE capture so it's always visible)
-                                        Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (threshold: " + result.livenessThreshold + ")");
-                                        /* 
-                                         Anti-spoof: スコアが最低基準を満たすかチェック
-                                         if (result.livenessScore < LIVENESS_SCORE_MINIMUM) {
-                                             Log.w(DEBUG_TAG, "★ Score TOO LOW: " + result.livenessScore + " < " + LIVENESS_SCORE_MINIMUM + " → REJECTED (possible photo)");
-                                             break; // Treat as failed - don't increment pass count
-                                         }
-                                        */
-                                        livenessOK = true;
-                                        /* 
-                                         なりすまし安定化: trackIdに依存せず、連続PASS回数のみカウント
-                                         mConsecutivePassCount++;
-                                        
-                                         if (mConsecutivePassCount < REQUIRED_PASS_COUNT) {
-                                             Log.d(DEBUG_TAG, "Liveness: PASS (Count: " + mConsecutivePassCount + "/" + REQUIRED_PASS_COUNT + ") - Waiting for confirmation...");
-                                             break; 
-                                         }
-                                        */
+                        // ライブネス判定（なりすまし防止・写真攻撃防止）
+                        // mLivenessEnabled=true の場合: SDKのlivenessClassifyを呼び出してスコア検証
+                        // mLivenessEnabled=false の場合: 判定をスキップし、即時認証へ進む
+                        boolean livenessOK = false; // ライブネス判定の通過フラグ
 
-                                        // Capture logic moved to executeFaceCapture()
-                                        // Mode switching below will handle TopK or Legacy capture
-                                        break;
-                                    case 1:
-                                        slivenessStat = "LIVENESS_RETRY";
-                                        break;
-                                    case 2:
-                                        slivenessStat = "LIVENESS_RETRY_EXPIRED";
-                                        break;
-                                    case 3:
-                                        slivenessStat = "LIVENESS_TRACK_MISSING";
-                                        break;
-                                    case 4:
-                                        slivenessStat = "LIVENESS_UNPASS";
-                                        // if (mConsecutivePassCount > 0) mConsecutivePassCount--; // デクリメント（リセットではなく減算）
-                                        break;
-                                    default:
-                                        break;
+                        if (mLivenessEnabled) {
+                            FacePassLivenessResult[] livenessResult = FacePassManager.mFacePassHandler.livenessClassify(recognizeData.message, recognizeData.trackOpt[0].trackId, FacePassLivenessMode.FP_REG_MODE_LIVENESS, recognizeData.trackOpt[0].livenessThreshold);
+                            if (null != livenessResult && livenessResult.length > 0) {
+                                Log.d(DEBUG_TAG, "FacePassLivenessResult length = " + livenessResult.length);
+                                for (FacePassLivenessResult result : livenessResult) {
+                                    String slivenessStat = " Unkonw";
+                                    switch (result.livenessState) {
+                                        case 0:
+                                            slivenessStat = "LIVENESS_PASS";
+                                            
+                                            // ★ Score log (printed BEFORE capture so it's always visible)
+                                            Log.d(DEBUG_TAG, "★ LIVENESS_PASS Score: " + result.livenessScore + " (threshold: " + result.livenessThreshold + ")");
+                                            livenessOK = true;
+                                            break;
+                                        case 1:
+                                            slivenessStat = "LIVENESS_RETRY";
+                                            break;
+                                        case 2:
+                                            slivenessStat = "LIVENESS_RETRY_EXPIRED";
+                                            break;
+                                        case 3:
+                                            slivenessStat = "LIVENESS_TRACK_MISSING";
+                                            break;
+                                        case 4:
+                                            slivenessStat = "LIVENESS_UNPASS";
+                                            break;
+                                        default:
+                                            break;
+                                    }
+
+                                    Log.d(DEBUG_TAG, "FacePassLivenessResult: trackId: " + result.trackId
+                                            + ", livenessScore: " + result.livenessScore
+                                            + ", livenessThreshold: " + result.livenessThreshold
+                                            + ", livenessState: " + slivenessStat + ", livenessState: " + result.livenessState);
                                 }
-
-                                Log.d(DEBUG_TAG, "FacePassLivenessResult: trackId: " + result.trackId
-                                        + ", livenessScore: " + result.livenessScore
-                                        + ", livenessThreshold: " + result.livenessThreshold
-                                        + ", livenessState: " + slivenessStat + ", livenessState: " + result.livenessState);
                             }
+                        } else {
+                            // ライブネス無効設定: スコアチェックをスキップして即時OK扱い
+                            Log.d(DEBUG_TAG, "★ ライブネス無効: スコアチェックをスキップします。");
+                            livenessOK = true;
                         }
 
                         // 生体判定がパスした場合のみ認証実行（なりすまし防止・写真攻撃防止）
@@ -626,17 +646,16 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                             Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                             Log.d(DEBUG_TAG, "★ [TopK] Liveness PASSED → Recognize...");
 
-                            // Mode Switching Logic
+                            // 認証モード切替: Top-Kモード（ローカルサーバ）またはクラウドサーバ
                             if (mUseTopKMode) {
-                                // MODE: TopK (Flow 3 with "Use TopK" enabled)
-                                Log.d(DEBUG_TAG, "★ [TopK Mode] Starting Local Recognition...");
-                                
-                                int topK = 5;
-                                float scoreFilter = 60.0f;
+                                // Top-Kモード: ローカルデータベースから上位K人の候補を取得
+                                Log.d(DEBUG_TAG, "★ [TopKモード] ローカル識別を開始...");
+
+                                int topK = mTopKCount;
+                                float scoreFilter = mRecognizeThreshold;
                                 Log.d(DEBUG_TAG, "  TopK=" + topK + ", ScoreFilter>=" + scoreFilter);
-                                
-                                // Maker準拠: trackOptから閾値を取得（マスク検知対応）
-                                // Call recognize with TopK, using Maker's original thresholds from trackOpt
+
+                                // Maker SDK準拠: trackOptから閾値を取得（マスク検知対応）
                                 FacePassRecognitionResult[] candidates = FacePassManager.mFacePassHandler.recognize(
                                         FacePassManager.group_name,
                                         recognizeData.message,
@@ -648,10 +667,14 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                 );
 
                                 java.util.ArrayList<String> candidateList = new java.util.ArrayList<>();
+                                // ★ Bug2修正: 候補IDリストと同順で名前を格納するリスト（TopActivityでのID→名前解決に使用）
+                                java.util.ArrayList<String> candidateNames = new java.util.ArrayList<>();
                                 
                                 if (candidates != null && candidates.length > 0) {
                                     Log.d(DEBUG_TAG, "★ [TopK] SDK Return: " + candidates.length + " candidates");
                                     int idx = 0;
+                                // ★ Bug1修正: Toastキューによる名前ズレを防ぐため、Top1候補にのみToastを表示するフラグ
+                                boolean isToastShown = false;
 
                                     for (FacePassRecognitionResult candidate : candidates) {
                                         idx++;
@@ -675,11 +698,20 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             // faceToken → employeeId変換（PalmSecureはemployeeIdを使用するため）
                                             String userId = dbHelper.findEmployeeId(faceToken);
                                             String candidateId = (userId != null && !userId.isEmpty()) ? userId : faceToken;
-                                            Log.d(DEBUG_TAG, "    → Token→EmployeeId: " + faceToken + " → " + candidateId);
+                                            // ★ Bug2修正: 候補の名前を取得し、IDリストと同順でcandidateNamesに追加
+                                            String candidateName = dbHelper.findName(faceToken);
+                                            if (candidateName == null) candidateName = "";
+
+                                            Log.d(DEBUG_TAG, "    → Token→EmployeeId: " + faceToken + " → " + candidateId + ", Name: " + candidateName);
                                             candidateList.add(candidateId);
-                                            // Debug display
-                                            if (FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
+                                            candidateNames.add(candidateName);
+
+                                            // ★ Bug1修正: 最初に閾値を超えたTop1候補にのみToastを表示（後続候補はスキップ）
+                                            // Android ToastはQueueで処理されるため、全候補にToastを出すと最後の候補名が
+                                            // 画面に残り続け、最終結果(Top1)と食い違いが発生する。
+                                            if (!isToastShown && FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
                                                 getFaceImageByFaceToken(candidate.trackId, faceToken);
+                                                isToastShown = true;
                                             }
                                             showRecognizeResult(candidate.trackId, searchScore, livenessScore, !TextUtils.isEmpty(faceToken));
                                         }
@@ -691,25 +723,60 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                     Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                                     Log.d(DEBUG_TAG, "★ [TopK] Broadcasting ACTION_CANDIDATE_LIST");
                                     Log.d(DEBUG_TAG, "  Candidate count: " + candidateList.size());
+                                    
+                                    // 連続キャプチャ防止のためフラグを早期セット
+                                    mIsVerifying = true;
+                                    mDetectResultQueue.clear();
+                                    
+                                    // 1番目の候補（最有力）の名前とIDを取得（★ローカル認証用）
+                                    String resultName = "";
+                                    String resultId = "";
+                                    try {
+                                        String topFaceToken = (candidates[0].faceToken != null) ? new String(candidates[0].faceToken) : "";
+                                        Log.d(DEBUG_TAG, "★ [デバッグ] Local DB検索開始: 対象Token=" + topFaceToken);
+                                        
+                                        resultName = dbHelper.findName(topFaceToken);
+                                        resultId = dbHelper.findEmployeeId(topFaceToken);
+                                        
+                                        Log.d(DEBUG_TAG, "★ [デバッグ] DB抽出結果: Name=" + resultName + ", EmployeeID=" + resultId);
+
+                                        // ★ Null安全性（NullSafety）を確保するOOP設計
+                                        if (resultId == null || resultId.isEmpty()) {
+                                            resultId = topFaceToken; // IDが見つからない場合はTokenをフォールバックとして使用
+                                            Log.w(DEBUG_TAG, "★ [警告] Employee IDが空です。TokenをIDとして代用します: " + resultId);
+                                        }
+                                        if (resultName == null) {
+                                            resultName = "";
+                                            Log.e(DEBUG_TAG, "★ [重大] 氏名(resultName)が見つかりません。DBが空、または登録データが未同期である可能性があります。");
+                                        }
+                                    } catch (Exception e) {
+                                        Log.e(DEBUG_TAG, "★ [エラー] トップ候補のメタデータ検索中に例外が発生しました", e);
+                                    }
+
+                                    Log.d(DEBUG_TAG, "  → Result Name: " + resultName);
+                                    Log.d(DEBUG_TAG, "  → Result ID: " + resultId);
+                                    
                                     for (int ci = 0; ci < candidateList.size(); ci++) {
-                                        Log.d(DEBUG_TAG, "  → Send[" + ci + "]: " + candidateList.get(ci));
+                                        Log.d(DEBUG_TAG, "  → List[" + ci + "]: " + candidateList.get(ci));
                                     }
                                     Log.d(DEBUG_TAG, "═══════════════════════════════════════════");
                                     
                                     android.content.Intent candidatesIntent = new android.content.Intent("com.bodycamera.ba.ACTION_CANDIDATE_LIST");
                                     candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
+                                    candidatesIntent.putExtra("result_name", resultName);
+                                    candidatesIntent.putExtra("result_id", resultId);
+                                    // ★ Bug2修正: 候補名リスト(candidateListと同順)をBroadcastに含める
+                                    // TopActivity側でVein認証のIDをキーに正確な名前を引き出すために使用
+                                    candidatesIntent.putStringArrayListExtra("candidate_names", candidateNames);
                                     sendBroadcast(candidatesIntent);
                                     
-                                    Log.d(DEBUG_TAG, "★ [TopK] Broadcast sent → Finishing FacePassActivity...");
-                                    mIsVerifying = true;
-                                    mDetectResultQueue.clear();
                                     
                                     // Auto-close camera so NewFaceAuthActivity can return to TopActivity
                                     mAndroidHandler.post(new Runnable() {
                                         @Override
                                         public void run() {
-                                            Log.d(DEBUG_TAG, "★ [TopK] Calling finish() to close camera");
-                                            finish();
+                                            Log.d(DEBUG_TAG, "★ [TopK] Calling safeFinish() to close camera");
+                                            safeFinish();
                                         }
                                     });
                                     return; // Exit RecognizeThread
@@ -747,23 +814,23 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 //                            }
 //                        }
                     }
-                    } // end if (mFacePassHandler != null && isLocalGroupExist)
-                } catch (InterruptedException e) {
-                    Log.e(DEBUG_TAG, "RecognizeThread Interrupted", e);
-                } catch (FacePassException e) {
-                    Log.e(DEBUG_TAG, "FacePassException in RecognizeThread", e);
-                } catch (Exception e) {
-                    Log.e(DEBUG_TAG, "Unexpected error in RecognizeThread", e);
                 }
+            } catch (InterruptedException e) {
+                Log.e(DEBUG_TAG, "RecognizeThread Interrupted", e);
+            } catch (FacePassException e) {
+                Log.e(DEBUG_TAG, "FacePassException in RecognizeThread", e);
+            } catch (Exception e) {
+                Log.e(DEBUG_TAG, "Unexpected error in RecognizeThread", e);
             }
         }
-
-        @Override
-        public void interrupt() {
-            isInterrupt = true;
-            super.interrupt();
-        }
     }
+
+    @Override
+    public void interrupt() {
+        isInterrupt = true;
+        super.interrupt();
+    }
+}
 
     private void showRecognizeResult(final long trackId, final float searchScore, final float livenessScore, final boolean isRecognizeOK) {
         mAndroidHandler.post(new Runnable() {
@@ -933,26 +1000,38 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
     @Override
     protected void onDestroy() {
+        // 認識スレッドと映像供給スレッドを停止する
         mRecognizeThread.isInterrupt = true;
         mFeedFrameThread.isInterrupt = true;
 
         mRecognizeThread.interrupt();
         mFeedFrameThread.interrupt();
 
+        // カメラリソースを解放する
         if (manager != null) {
             manager.release();
         }
         if (mIRCameraManager != null) {
             mIRCameraManager.release();
         }
+
+        // Broadcast Receiverの登録を解除する
         try {
             unregisterReceiver(authReceiver);
         } catch (Exception e) {
-            // Receiver might not be registered
+            // Receiverが登録されていない場合は無視する
         }
 
+        // UIスレッドのタスクをすべてキャンセルする
         if (mAndroidHandler != null) {
             mAndroidHandler.removeCallbacksAndMessages(null);
+        }
+
+        // ★ DBコネクションを解放する（onDestroy()のみで行う）
+        // 注意: 各DBメソッド内では db.close() を呼ばず、ここで一括解放する。
+        //      これにより RecognizeThread 実行中に接続が切断される問題を防ぐ。
+        if (dbHelper != null) {
+            dbHelper.close();
         }
 
         /* ★ SDK解放をコメントアウト（パフォーマンス最適化）
@@ -1108,7 +1187,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     String name = dbHelper.findName(faceToken);
                     String employeeId = dbHelper.findEmployeeId(faceToken);
                     Log.i(DEBUG_TAG, "getFaceImageByFaceToken:showToast");
-                    showToast("姓名 = " + name, Toast.LENGTH_SHORT, true, bitmap);
+                    showToast("氏名 = " + name, Toast.LENGTH_SHORT, true, bitmap);
                     //ID を表示する場合
                     // showToast("姓名 = " + name + "\nID = " + (employeeId != null ? employeeId : ""), Toast.LENGTH_SHORT, true, bitmap);
                 }
@@ -1166,7 +1245,20 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 return;
             }
 
-            // 1. YuvImageを使用してNV21からJPEGに変換
+            // 1. キャプチャ用ディレクトリの準備とクリーンアップ
+            String fileName = "face_" + System.currentTimeMillis() + ".jpg";
+            // ★ Sửa lỗi "Image file not found": Sử dụng thư mục Download để ứng dụng BA có thể truy cập được ảnh cho luồng Cloud Auth
+            java.io.File sharedDir = new java.io.File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "FaceAuth");
+            
+            // ストレージ肥大化を防ぐため、新しい写真を保存する前に古いファイルをすべて削除します
+            if (sharedDir.exists()) {
+                mcv.testfacepass.utils.FileUtil.deleteContents(sharedDir);
+            } else {
+                sharedDir.mkdirs();
+            }
+
+            // 2. YuvImageを使用してNV21からJPEGに変換
             android.graphics.YuvImage yuvImage = new android.graphics.YuvImage(
                     finalImageData,
                     android.graphics.ImageFormat.NV21,
@@ -1174,20 +1266,20 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                     finalHeight,
                     null);
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 50, out); // 中間ステップのみ (RAM内)、品質50で十分
+            yuvImage.compressToJpeg(new android.graphics.Rect(0, 0, finalWidth, finalHeight), 50, out);
             byte[] jpegBytes = out.toByteArray();
+            try { out.close(); } catch (Exception ignored) {}
 
-            // 2. 回転処理のためにBitmapにデコード
+            // 3. 回転処理のためにBitmapにデコード
             android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
             if (bitmap == null) {
                 Log.e(DEBUG_TAG, "Critical: JPEG Decode failed in memory!");
                 return;
             }
 
-            // 3. 回転処理 (270度)
+            // 4. 回転処理 (270度)
             int finalRotation = 270;
-            // 転送速度とタイムアウト防止のため、品質を80~100%に調整
-            int jpegQuality = 80; // Maximized to avoid "Low Quality" API error
+            int jpegQuality = 80;
 
             if (finalRotation != 0) {
                 android.graphics.Matrix matrix = new android.graphics.Matrix();
@@ -1199,7 +1291,7 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 }
             }
 
-            // 3.5 リサイズ処理 (最大1024px) - サーバー要件に合わせる
+            // 5. リサイズ処理 (最大1024px)
             int maxDim = 1024;
             int bw = bitmap.getWidth();
             int bh = bitmap.getHeight();
@@ -1221,16 +1313,8 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                 Log.d(DEBUG_TAG, "Resized: " + bw + "x" + bh + " → " + newW + "x" + newH);
             }
 
-            // 4. 共有ディレクトリに保存 (Scoped Storage対策: 両アプリがアクセス可能な場所)
-            String fileName = "face_" + System.currentTimeMillis() + ".jpg";
-            java.io.File sharedDir = new java.io.File(
-                android.os.Environment.getExternalStorageDirectory(), "FaceAuth");
-            if (!sharedDir.exists()) {
-                sharedDir.mkdirs();
-            }
-            
+            // 6. ファイルへの最終保存
             java.io.File destFile = new java.io.File(sharedDir, fileName);
-            
             java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
             boolean compressOk = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, jpegQuality, fos);
             fos.flush();
@@ -1238,10 +1322,11 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
 
             if (!compressOk || destFile.length() == 0) {
                 Log.e(DEBUG_TAG, "Failed to compress bitmap to file!");
+                if (bitmap != null) bitmap.recycle();
                 return;
             }
 
-            // 5. FileProviderを介してコンテンツURIを返す (Android 11+ 対策)
+            // 7. FileProviderを介してコンテンツURIを返す (Android 11+ 対策)
             final String finalPath = destFile.getAbsolutePath();
             final int finalW = bitmap.getWidth();
             final int finalH = bitmap.getHeight();
@@ -1282,8 +1367,24 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
             mDetectResultQueue.clear(); 
             
             Log.d(DEBUG_TAG, "★ 待機 API応答待ち開始 (mIsVerifying=true)");
+            
+            // 8. メモリ解放
+            if (bitmap != null) {
+                bitmap.recycle();
+            }
         } catch (Exception e) {
             Log.e(DEBUG_TAG, "Ultimate Capture Failure", e);
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        Log.d(DEBUG_TAG, "★ onWindowFocusChanged: hasFocus=" + hasFocus + ", mPendingFinish=" + mPendingFinish);
+        if (hasFocus && mPendingFinish) {
+            Log.d(DEBUG_TAG, "★ onWindowFocusChanged: Executing postponed finish() safely.");
+            mPendingFinish = false;
+            finish();
         }
     }
 }

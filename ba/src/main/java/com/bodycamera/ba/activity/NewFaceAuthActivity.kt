@@ -66,9 +66,18 @@ class NewFaceAuthActivity : AppCompatActivity() {
         mServerUrl = prefs.getString(SettingsActivity.KEY_SERVER_URL, "") ?: ""
         mDeviceId = prefs.getString(SettingsActivity.KEY_DEVICE_ID, "") ?: ""
         val livenessThreshold = prefs.getFloat(SettingsActivity.KEY_LIVENESS_THRESHOLD, 88.0f)
-        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}, Liveness=$livenessThreshold")
+        val identDistIndex = prefs.getInt(SettingsActivity.KEY_IDENT_DISTANCE, 1)
+        val faceMinThreshold = when (identDistIndex) {
+            0 -> 150
+            1 -> 100
+            2 -> 60
+            3 -> 25
+            else -> 100
+        }
+        Log.d(TAG, "★ Settings Pre-fetched: URL=${if(mServerUrl.isEmpty()) "EMPTY" else "OK"}, ID=${if(mDeviceId.isEmpty()) "EMPTY" else "OK"}, Liveness=$livenessThreshold, DistanceIndex: $identDistIndex -> FaceMinThreshold: $faceMinThreshold")
 
         if (checkPermission()) {
+            checkAllFilesPermission() // ★ Android 11+ 全ファイルアクセス権限の確認
             startCaptureSafe()
         } else {
             requestPermission()
@@ -81,7 +90,7 @@ class NewFaceAuthActivity : AppCompatActivity() {
      * NG時はカメラ画面でToast表示→自動再試行が可能になります。
      */
     private fun startCaptureSafe() {
-        Log.d(TAG, "キャプチャ戦略を開始します")
+        Log.d(TAG, "キャプチャを開始します")
         try {
             // Retrieve TopK option from Intent
             val useTopK = intent.getBooleanExtra("should_use_topk", false)
@@ -109,6 +118,29 @@ class NewFaceAuthActivity : AppCompatActivity() {
 
     private fun requestPermission() {
         requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 101)
+    }
+
+    /**
+     * Android 11 (API 30) 以上で必要な「全ファイルの管理」権限を確認します。
+     * この権限がない場合、Maker Appが保存した画像ファイルにアクセスできない可能性があります。
+     */
+    private fun checkAllFilesPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                Log.w(TAG, "★ [警告] MANAGE_EXTERNAL_STORAGE 権限がありません。設定画面へ誘導します。")
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    intent.data = android.net.Uri.parse("package:$packageName")
+                    startActivity(intent)
+                }
+                Toast.makeText(this, "「全ファイルの管理」を許可してください", Toast.LENGTH_LONG).show()
+            } else {
+                Log.d(TAG, "★ [確認] MANAGE_EXTERNAL_STORAGE 権限 OK")
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -158,29 +190,70 @@ class NewFaceAuthActivity : AppCompatActivity() {
             } else if (intent?.action == ACTION_CANDIDATE_LIST) {
                 val candidates = intent.getStringArrayListExtra("candidate_list")
                 if (candidates != null && candidates.isNotEmpty()) {
-                    Log.d(TAG, "★受信ACTION_CANDIDATE_LIST: count=${candidates.size}")
-                    handleCandidateList(candidates)
+                    // MakerAppから認証結果の氏名とIDを取得します。
+                    // 複数のキー（result_name/name, result_id/id）をチェックして柔軟に対応します。
+                    val resultName = intent.getStringExtra("result_name") ?: intent.getStringExtra("name")
+                    val resultId = intent.getStringExtra("result_id") ?: intent.getStringExtra("id")
+                    // ★ Bug2修正: 候補IDリストと同順の名前リストを受信（TopActivityでのID→名前解決に使用）
+                    val candidateNames = intent.getStringArrayListExtra("candidate_names")
+                    
+                    Log.d(TAG, "★ [デバッグ] 受信(Receiver) ACTION_CANDIDATE_LIST:")
+                    Log.d(TAG, "  → count=${candidates.size}, name=$resultName, id=$resultId, names=${candidateNames?.size ?: 0}")
+                    handleCandidateList(candidates, resultName, resultId, candidateNames)
                 }
             }
         }
     }
 
     /**
-     * TopK候補リストを受け取った場合の処理
+     * MakerApp（ローカルサーバ）からのTopK候補リストを受け取った場合の処理。
+     * 氏名（resultName）とID（resultId）が提供された場合はそれを優先して結果画面に表示します。
+     *
+     * @param candidates      認証候補者IDのリスト（静脈認証の絞り込みなどに使用）
+     * @param resultName      MakerAppが特定した認証成功者の氏名（ローカルモード時に設定される）
+     * @param resultId        MakerAppが特定した認証成功者のID（ローカルモード時に設定される）
+     * @param candidateNames  candidatesリストと同順の候補者名前リスト（Bug2修正: TopActivityでVein認証後に正確な名前を引き出すため）
      */
-    private fun handleCandidateList(candidates: ArrayList<String>) {
+    private fun handleCandidateList(candidates: ArrayList<String>, resultName: String?, resultId: String?, candidateNames: ArrayList<String>? = null) {
         Log.d(TAG, "═══════════════════════════════════════════")
         Log.d(TAG, "★ handleCandidateList: ${candidates.size} candidates received")
+        Log.d(TAG, "★ resultName=$resultName, resultId=$resultId")
         candidates.forEachIndexed { i, token ->
             Log.d(TAG, "  → Received[$i]: $token")
         }
         Log.d(TAG, "★ Setting RESULT_OK with candidate_list → Finishing NewFaceAuthActivity...")
         Log.d(TAG, "═══════════════════════════════════════════")
-        
+
         val data = Intent().apply {
             putStringArrayListExtra("candidate_list", candidates)
             putExtra("ResultStatus", 2)
-            putExtra("ResultMessage", "TopK Candidates Found")
+
+            // 氏名とIDが取得できた場合は結果画面に表示させるためのキーをセットします。
+            // これにより VeinResultActivity の handleNewFaceAuthIntent が正しい情報を表示できます。
+            // ★OOP対応: 値がNullやEmptyでないことを厳密にチェックします。
+            if (!resultName.isNullOrEmpty()) {
+                putExtra("ResultName", resultName)
+                Log.d(TAG, "★ [デバッグ] PutExtra: ResultName=$resultName")
+            } else {
+                Log.e(TAG, "★ [警告] ResultNameが空です！DBから正しく引けていない可能性があります。")
+            }
+            if (!resultId.isNullOrEmpty()) {
+                putExtra("ResultID", resultId)
+                Log.d(TAG, "★ [デバッグ] PutExtra: ResultID=$resultId")
+            } else {
+                Log.e(TAG, "★ [警告] ResultIDが空です！")
+            }
+
+            // ★ Bug2修正: 候補名リストを結果データに含める（TopActivityでVein認証後の正確な名前解決に使用）
+            // このリストはcandidate_listと同じ順序であり、ID[i]に対応する名前がnames[i]となる。
+            if (candidateNames != null && candidateNames.isNotEmpty()) {
+                putStringArrayListExtra("candidate_names", candidateNames)
+                Log.d(TAG, "★ [デバッグ] PutExtra: candidate_names=${candidateNames.size}件")
+            }
+
+            // ★ UIクリーンアップ: メッセージ行からName/IDを削除し、下のボックス表示のみに集中させます。
+            val message = "認証成功"
+            putExtra("ResultMessage", message)
         }
         setResult(RESULT_OK, data)
         finish()
@@ -244,10 +317,18 @@ class NewFaceAuthActivity : AppCompatActivity() {
                             val result = gson.fromJson(responseJson, FaceAuthResponse::class.java)
                             
                             // ステータス判定
-                            // Status 0: 認証成功
-                            // Status 2: 認証成功（情報/警告付き）
-                            // Status 1: 認証失敗
-                            val isSuccess = (result.status == 0 || result.status == 2)
+                            // 仕様書に基づく判定ロジック:
+                            // status==0: 正常成功 (?) 念のため維持
+                            // status==1: 認証失敗
+                            // status==2: 「デバイスID未登録」(失敗) と 「認証成功かつ勤怠APIエラー/無効」(成功) の両方で使われる。
+                            // そのため、status==2の場合は message が "認証成功" を含んでいるかで判定する。
+                            val isSuccess = if (result.status == 0) {
+                                true
+                            } else if (result.status == 2) {
+                                result.message?.contains("認証成功") == true
+                            } else {
+                                false
+                            }
                             
                             Log.d(TAG, "★ API結果 status=${result.status}, name=${result.name}, similarity=${result.similarity}, message=${result.message}")
                             Log.d(TAG, "★ API結果 判定: ${if (isSuccess) "成功" else "失敗"}")
@@ -258,8 +339,10 @@ class NewFaceAuthActivity : AppCompatActivity() {
                                 // Maker Appに終了通知
                                 broadcastAuthResult(true, "認証成功", responseJson)
                             } else {
-                                // 認証失敗 → Maker App側でリトライ
+                                // 認証失敗 (不一致、デバイス未登録、またはネットワークエラー発生時)
                                 val msg = result.message ?: "認証失敗 (status=${result.status})"
+                                Log.w(TAG, "★ API結果 失敗: $msg")
+                                // status == -1 の場合はNWエラーとして扱う
                                 broadcastAuthResult(false, msg, responseJson)
                             }
                             
@@ -268,7 +351,8 @@ class NewFaceAuthActivity : AppCompatActivity() {
                             broadcastAuthResult(false, "サーバー無効応答")
                         }
                     } else {
-                        Log.e(TAG, "★ API応答 失敗: レスポンスが空(null)です。NW環境 hoặc Server link を確認してください。")
+                        // FaceRecognitionApi が例外時に JSON メッセージを返すようにしたため、ここに来ることは稀です。
+                        Log.e(TAG, "★ API応答 失敗: レスポンスが空(null)です。")
                         broadcastAuthResult(false, "ネットワークエラー")
                 }
 

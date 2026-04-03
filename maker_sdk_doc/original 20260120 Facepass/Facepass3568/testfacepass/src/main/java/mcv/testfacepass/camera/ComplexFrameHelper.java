@@ -12,13 +12,24 @@ public class ComplexFrameHelper {
     private static CameraPreviewData rgbFrameBuffer = null;
     private static CameraPreviewData irFrameBuffer = null;
 
+    public static boolean isLivenessEnabled = true;
+
     private static void makeComplexFrame() {
-        if ((rgbFrameBuffer != null) && (irFrameBuffer != null)) {
-            if (complexFrameQueue.remainingCapacity() > 0) {
-                complexFrameQueue.offer(new Pair(rgbFrameBuffer, irFrameBuffer));
+        if (isLivenessEnabled) {
+            if ((rgbFrameBuffer != null) && (irFrameBuffer != null)) {
+                if (complexFrameQueue.remainingCapacity() > 0) {
+                    complexFrameQueue.offer(new Pair(rgbFrameBuffer, irFrameBuffer));
+                }
+                rgbFrameBuffer = null;
+                irFrameBuffer = null;
             }
-            rgbFrameBuffer = null;
-            irFrameBuffer = null;
+        } else {
+            if (rgbFrameBuffer != null) {
+                if (complexFrameQueue.remainingCapacity() > 0) {
+                    complexFrameQueue.offer(new Pair(rgbFrameBuffer, null));
+                }
+                rgbFrameBuffer = null;
+            }
         }
     }
 
