@@ -667,10 +667,14 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                 );
 
                                 java.util.ArrayList<String> candidateList = new java.util.ArrayList<>();
+                                // ★ Bug2修正: 候補IDリストと同順で名前を格納するリスト（TopActivityでのID→名前解決に使用）
+                                java.util.ArrayList<String> candidateNames = new java.util.ArrayList<>();
                                 
                                 if (candidates != null && candidates.length > 0) {
                                     Log.d(DEBUG_TAG, "★ [TopK] SDK Return: " + candidates.length + " candidates");
                                     int idx = 0;
+                                // ★ Bug1修正: Toastキューによる名前ズレを防ぐため、Top1候補にのみToastを表示するフラグ
+                                boolean isToastShown = false;
 
                                     for (FacePassRecognitionResult candidate : candidates) {
                                         idx++;
@@ -694,11 +698,20 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                             // faceToken → employeeId変換（PalmSecureはemployeeIdを使用するため）
                                             String userId = dbHelper.findEmployeeId(faceToken);
                                             String candidateId = (userId != null && !userId.isEmpty()) ? userId : faceToken;
-                                            Log.d(DEBUG_TAG, "    → Token→EmployeeId: " + faceToken + " → " + candidateId);
+                                            // ★ Bug2修正: 候補の名前を取得し、IDリストと同順でcandidateNamesに追加
+                                            String candidateName = dbHelper.findName(faceToken);
+                                            if (candidateName == null) candidateName = "";
+
+                                            Log.d(DEBUG_TAG, "    → Token→EmployeeId: " + faceToken + " → " + candidateId + ", Name: " + candidateName);
                                             candidateList.add(candidateId);
-                                            // Debug display
-                                            if (FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
+                                            candidateNames.add(candidateName);
+
+                                            // ★ Bug1修正: 最初に閾値を超えたTop1候補にのみToastを表示（後続候補はスキップ）
+                                            // Android ToastはQueueで処理されるため、全候補にToastを出すと最後の候補名が
+                                            // 画面に残り続け、最終結果(Top1)と食い違いが発生する。
+                                            if (!isToastShown && FacePassRecognitionState.RECOGNITION_PASS == candidate.recognitionState) {
                                                 getFaceImageByFaceToken(candidate.trackId, faceToken);
+                                                isToastShown = true;
                                             }
                                             showRecognizeResult(candidate.trackId, searchScore, livenessScore, !TextUtils.isEmpty(faceToken));
                                         }
@@ -752,6 +765,9 @@ public class FacePassActivity extends Activity implements CameraManager.CameraLi
                                     candidatesIntent.putStringArrayListExtra("candidate_list", candidateList);
                                     candidatesIntent.putExtra("result_name", resultName);
                                     candidatesIntent.putExtra("result_id", resultId);
+                                    // ★ Bug2修正: 候補名リスト(candidateListと同順)をBroadcastに含める
+                                    // TopActivity側でVein認証のIDをキーに正確な名前を引き出すために使用
+                                    candidatesIntent.putStringArrayListExtra("candidate_names", candidateNames);
                                     sendBroadcast(candidatesIntent);
                                     
                                     

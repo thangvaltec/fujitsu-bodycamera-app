@@ -46,6 +46,10 @@ class TopActivity : AppCompatActivity() {
     // 静脈認証完了後に結果画面（VeinResultActivity）で表示するために使用します。
     private var faceResultName: String? = null
     private var faceResultId: String? = null
+    // ★ Bug2修正: 単一の名前変数から、ID→名前の対応マップに変更。
+    // 顔認証でTop1の名前だけを保持する不具合を解決する。
+    // 静脈認証後、実際にスキャンしたユーザーIDをキーに正確な名前を引き出す。
+    private val faceCandidateMap: HashMap<String, String> = HashMap()
 
     // BodyCamera Service 接続管理
     private val mConnection =
@@ -195,6 +199,7 @@ class TopActivity : AppCompatActivity() {
             // ★ 前回の顔認証キャッシュをリセット（名前・IDの引き継ぎ漏れ防止）
             faceResultName = null
             faceResultId = null
+            faceCandidateMap.clear() // Bug2修正: ID→名前マップもリセット
             launchPalmSecure("identify", null, true, true, true)
         }
 
@@ -448,6 +453,7 @@ class TopActivity : AppCompatActivity() {
                     // ★ Auto-Loop時: 前回の顔認証キャッシュをリセット（名前・IDの引き継ぎ漏れ防止）
                     faceResultName = null
                     faceResultId = null
+                    faceCandidateMap.clear() // Bug2修正: ID→名前マップもリセット
                     launchPalmSecure("identify", null, autoStart = true, returnResult = true, fromExternal = true)
                 }
                 "both" -> {
@@ -493,8 +499,19 @@ class TopActivity : AppCompatActivity() {
                         // ★ 顔認証時の氏名はFlow3(FaceAndVein)の場合のみ引き継ぎます。
                         // Flow2(Vein Only)では顔認証キャッシュが残っていても絶対に渡しません。
                         val isVeinOnlyMode = (currentAuthMode() == "Vein")
-                        if (!isVeinOnlyMode && faceResultName != null) {
-                            putExtra("ResultName", faceResultName)
+                        if (!isVeinOnlyMode) {
+                            // ★ Bug2修正: Vein認証で得たIDをキーにマップから正確な名前を引き出す。
+                            // 顔認証のTop1名（faceResultName）を流用する不具合を修正する。
+                            val resolvedName: String? = if (userIdStr != null && faceCandidateMap.containsKey(userIdStr)) {
+                                Log.d(TAG, "★ [] IDマップから名前を解決: ID=$userIdStr → Name=${faceCandidateMap[userIdStr]}")
+                                faceCandidateMap[userIdStr]
+                            } else {
+                                Log.w(TAG, "★ [] IDマップに該当なし (ID=$userIdStr)。フォールバック: faceResultName=$faceResultName")
+                                faceResultName
+                            }
+                            if (resolvedName != null) {
+                                putExtra("ResultName", resolvedName)
+                            }
                         }
                         if (userIdStr != null) {
                             putExtra("ResultID", userIdStr) // 静脈IDを優先
@@ -539,10 +556,21 @@ class TopActivity : AppCompatActivity() {
                         faceResultName = resultName
                         faceResultId = resultId
                         
-                        Log.d(TAG, "  Similarity=$similarity")
-                        Log.d(TAG, "  CandidateList: ${candidateList?.size ?: 0} 人")
+                        Log.d(TAG, "★ [Flow3] 候補リスト: ${candidateList?.size ?: 0} 人")
                         candidateList?.forEachIndexed { i, id ->
                             Log.d(TAG, "    Candidate[$i]: $id")
+                        }
+
+                        // ★ Bug2修正: 候補名リスト受信とID→名前マップの構築
+                        val candidateNamesList = data.getStringArrayListExtra("candidate_names")
+                        faceCandidateMap.clear()
+                        if (candidateList != null && candidateNamesList != null && candidateList.size == candidateNamesList.size) {
+                            candidateList.forEachIndexed { i, id ->
+                                faceCandidateMap[id] = candidateNamesList[i]
+                            }
+                            Log.d(TAG, "★ [] faceCandidateMap 構築完了: $faceCandidateMap")
+                        } else {
+                            Log.w(TAG, "★ [] candidate_names未受信 or サイズ不一致 → マップ不可")
                         }
                         Log.d(TAG, "═══════════════════════════════════════════")
                         if (candidateList != null && candidateList.isNotEmpty()) {

@@ -327,3 +327,117 @@ Face認証完了からVein認証開始までの待機時間 (Transition Delay):
 SettingsActivity にこれらの値を入力する項目を追加する。
 数値（ミリ秒）で入力し、SharedPreferences に保存する。
 保存された値がない場合は、現在のデフォルト値（500ms / 2000ms）を使用する。
+--
+ここから
+---
+### 【Lưu ý sửa đổi sau này - Debug & Logic Auth】
+
+#### 1. Lỗi Logic xác thực sai (Status = 2)
+- **Vấn đề:** Hiện tại trong `NewFaceAuthActivity.kt`, code đang coi `status == 0` (Thành công) và `status == 2` (Thiết bị chưa đăng ký) đều là **Thành công**.
+- **Hậu quả:** Server trả về "デバイスID未登録" nhưng App vẫn hiện thông báo "認証成功".
+- **Cần sửa:** Chỉ chấp nhận `status == 0` là thành công. Các mã khác phải báo lỗi theo `message` từ Server.
+
+#### 2. Cải thiện thông báo lỗi Network (Tránh báo lỗi mạng giả)
+- **Vấn đề:** Khi `FaceRecognitionApi` gặp bất kỳ lỗi nào (Sai URL, Lỗi SSL, Lỗi kết nối), nó đều trả về `null` dẫn đến App hiện "Network Error". Điều này khiến việc debug tại máy khách hàng cực kỳ khó khăn.
+- **Cần sửa:**
+    - Bổ sung `try-catch` chi tiết để bắt riêng `MalformedURLException`, `SSLHandshakeException`, `ConnectTimeoutException`.
+    - Hiển thị thông báo lỗi cụ thể lên UI thay vì chỉ hiện "Network Error". Điều này giúp xác định ngay lập tức lý do Máy 1 (Khách hàng) bị lỗi dù Máy 2 (Dev) vẫn chạy.
+    - Kiểm tra và yêu cầu quyền `MANAGE_EXTERNAL_STORAGE` (All Files Access) một cách chủ động để tránh lỗi không đọc được ảnh trên Android 11+.
+
+--------- beginning of system
+04-02 17:49:51.109 12107 12107 D NewFaceAuthActivity: ★ [終了] BroadcastReceiver登録解除完了
+04-02 17:49:53.222 12107 12107 D NewFaceAuthActivity: ★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE & ACTION_CANDIDATE_LIST 待機開始)
+04-02 17:49:53.223 12107 12107 D NewFaceAuthActivity: ★ Settings Pre-fetched: URL=OK, ID=OK, Liveness=88.0, DistanceIndex: 2 -> FaceMinThreshold: 60
+04-02 17:49:53.223 12107 12107 D NewFaceAuthActivity: キャプチャ戦略を開始します
+04-02 17:50:56.108 12107 12107 D NewFaceAuthActivity: ★受信ACTION_PROCESS_FACE: imagePath=/storage/emulated/0/Download/FaceAuth/face_1775119855571.jpg
+04-02 17:50:56.109 12107 12107 D NewFaceAuthActivity: ★受信ファイル確認OK: size=48KB, path=/storage/emulated/0/Download/FaceAuth/face_1775119855571.jpg
+04-02 17:50:56.111 12107 12107 D NewFaceAuthActivity: ★ API処理 開始 - ファイル: /storage/emulated/0/Download/FaceAuth/face_1775119855571.jpg (48KB)
+04-02 17:50:56.111 12107 12107 D NewFaceAuthActivity: ★ API送信 送信先URL: https://mot-recog.facet-cloud.com/
+04-02 17:50:56.111 12107 12107 D NewFaceAuthActivity: ★ API送信 デバイスID: 33333 | policeId: null
+04-02 17:50:56.111 12107 12107 D NewFaceAuthActivity: ★ API送信 送信ファイル: face_1775119855571.jpg (48KB)
+04-02 17:50:56.223 12107 12253 E FaceRecognitionApi: Error 405: {"detail":"Method Not Allowed"}
+04-02 17:50:56.224 12107 12107 D NewFaceAuthActivity: ★ API応答 応答時間: 113ms
+04-02 17:50:56.225 12107 12107 D NewFaceAuthActivity: ★ API応答 レスポンスJSON: {"detail":"Method Not Allowed"}
+04-02 17:50:56.225 12107 12107 D NewFaceAuthActivity: ★ API結果 status=0, name=null, similarity=null, message=null
+04-02 17:50:56.225 12107 12107 D NewFaceAuthActivity: ★ API結果 判定: 成功
+04-02 17:50:56.230 12107 12107 D NewFaceAuthActivity: ★ 送信ACTION_AUTH_RESULT → Maker App: Success=true, message=認証成功
+04-02 17:50:56.279 12107 12107 D NewFaceAuthActivity: onActivityResult: req=7777, res=0
+04-02 17:50:56.279 12107 12107 D NewFaceAuthActivity: ★ Broadcast経由の認証結果あり → 結果画面へ遷移
+04-02 17:50:56.700 12107 12107 D NewFaceAuthActivity: ★ [終了] BroadcastReceiver登録解除完了
+04-02 17:50:58.806 12107 12107 D NewFaceAuthActivity: ★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE & ACTION_CANDIDATE_LIST 待機開始)
+04-02 17:50:58.806 12107 12107 D NewFaceAuthActivity: ★ Settings Pre-fetched: URL=OK, ID=OK, Liveness=88.0, DistanceIndex: 2 -> FaceMinThreshold: 60
+04-02 17:50:58.806 12107 12107 D NewFaceAuthActivity: キャプチャ戦略を開始します
+04-02 17:51:01.201 12107 12107 D NewFaceAuthActivity: onActivityResult: req=7777, res=0
+04-02 17:51:01.201 12107 12107 D NewFaceAuthActivity: ★ ユーザーがバックボタンを押しました → トップ画面に戻ります (Time: 1775119861201)
+04-02 17:51:01.437 12107 12107 D NewFaceAuthActivity: ★ [終了] BroadcastReceiver登録解除完了
+04-02 17:51:08.879 12107 12107 D NewFaceAuthActivity: ★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE & ACTION_CANDIDATE_LIST 待機開始)
+04-02 17:51:08.880 12107 12107 D NewFaceAuthActivity: ★ Settings Pre-fetched: URL=OK, ID=OK, Liveness=88.0, DistanceIndex: 2 -> FaceMinThreshold: 60
+04-02 17:51:08.880 12107 12107 D NewFaceAuthActivity: キャプチャ戦略を開始します
+04-02 17:51:11.045 12107 12107 D NewFaceAuthActivity: ★受信ACTION_PROCESS_FACE: imagePath=/storage/emulated/0/Download/FaceAuth/face_1775119870601.jpg
+04-02 17:51:11.046 12107 12107 D NewFaceAuthActivity: ★受信ファイル確認OK: size=55KB, path=/storage/emulated/0/Download/FaceAuth/face_1775119870601.jpg
+04-02 17:51:11.049 12107 12107 D NewFaceAuthActivity: ★ API処理 開始 - ファイル: /storage/emulated/0/Download/FaceAuth/face_1775119870601.jpg (55KB)
+04-02 17:51:11.049 12107 12107 D NewFaceAuthActivity: ★ API送信 送信先URL: https://mot-recog.facet-cloud.com/
+04-02 17:51:11.049 12107 12107 D NewFaceAuthActivity: ★ API送信 デバイスID: 33333 | policeId: null
+04-02 17:51:11.050 12107 12107 D NewFaceAuthActivity: ★ API送信 送信ファイル: face_1775119870601.jpg (55KB)
+04-02 17:51:11.121 12107 12253 E FaceRecognitionApi: Error 405: {"detail":"Method Not Allowed"}
+04-02 17:51:11.122 12107 12107 D NewFaceAuthActivity: ★ API応答 応答時間: 72ms
+04-02 17:51:11.122 12107 12107 D NewFaceAuthActivity: ★ API応答 レスポンスJSON: {"detail":"Method Not Allowed"}
+04-02 17:51:11.123 12107 12107 D NewFaceAuthActivity: ★ API結果 status=0, name=null, similarity=null, message=null
+04-02 17:51:11.123 12107 12107 D NewFaceAuthActivity: ★ API結果 判定: 成功
+04-02 17:51:11.126 12107 12107 D NewFaceAuthActivity: ★ 送信ACTION_AUTH_RESULT → Maker App: Success=true, message=認証成功
+04-02 17:51:11.181 12107 12107 D NewFaceAuthActivity: onActivityResult: req=7777, res=0
+04-02 17:51:11.182 12107 12107 D NewFaceAuthActivity: ★ Broadcast経由の認証結果あり → 結果画面へ遷移
+04-02 17:51:11.777 12107 12107 D NewFaceAuthActivity: ★ [終了] BroadcastReceiver登録解除完了
+04-02 17:53:21.343 12107 12107 D NewFaceAuthActivity: ★ BroadcastReceiver登録完了 (ACTION_PROCESS_FACE & ACTION_CANDIDATE_LIST 待機開始)
+04-02 17:53:21.343 12107 12107 D NewFaceAuthActivity: ★ Settings Pre-fetched: URL=OK, ID=OK, Liveness=88.0, DistanceIndex: 2 -> FaceMinThreshold: 60
+04-02 17:53:21.343 12107 12107 D NewFaceAuthActivity: キャプチャ戦略を開始します
+04-02 17:53:24.124 12107 12107 D NewFaceAuthActivity: ★受信ACTION_PROCESS_FACE: imagePath=/storage/emulated/0/Download/FaceAuth/face_1775120003624.jpg
+04-02 17:53:24.130 12107 12107 D NewFaceAuthActivity: ★受信ファイル確認OK: size=49KB, path=/storage/emulated/0/Download/FaceAuth/face_1775120003624.jpg
+04-02 17:53:24.132 12107 12107 D NewFaceAuthActivity: ★ API処理 開始 - ファイル: /storage/emulated/0/Download/FaceAuth/face_1775120003624.jpg (49KB)
+04-02 17:53:24.132 12107 12107 D NewFaceAuthActivity: ★ API送信 送信先URL: https://mot-recog.facet-cloud.com/recv
+04-02 17:53:24.132 12107 12107 D NewFaceAuthActivity: ★ API送信 デバイスID: 333333333 | policeId: null
+04-02 17:53:24.132 12107 12107 D NewFaceAuthActivity: ★ API送信 送信ファイル: face_1775120003624.jpg (49KB)
+04-02 17:53:24.275 12107 12253 D FaceRecognitionApi: Success: {"status":2,"deviceId":"333333333","policeId":"null","similarity":"0","name":"","real_id":"","data":"","message":"デバイスID未登録"}
+04-02 17:53:24.275 12107 12107 D NewFaceAuthActivity: ★ API応答 応答時間: 143ms
+04-02 17:53:24.275 12107 12107 D NewFaceAuthActivity: ★ API応答 レスポンスJSON: {"status":2,"deviceId":"333333333","policeId":"null","similarity":"0","name":"","real_id":"","data":"","message":"デバイスID未登録"}
+04-02 17:53:24.276 12107 12107 D NewFaceAuthActivity: ★ API結果 status=2, name=, similarity=0, message=デバイスID未登録
+04-02 17:53:24.276 12107 12107 D NewFaceAuthActivity: ★ API結果 判定: 成功
+04-02 17:53:24.279 12107 12107 D NewFaceAuthActivity: ★ 送信ACTION_AUTH_RESULT → Maker App: Success=true, message=認証成功
+04-02 17:53:24.336 12107 12107 D NewFaceAuthActivity: onActivityResult: req=7777, res=0
+04-02 17:53:24.336 12107 12107 D NewFaceAuthActivity: ★ Broadcast経由の認証結果あり → 結果画面へ遷移
+04-02 17:53:24.731 12107 12107 D NewFaceAuthActivity: ★ [終了] BroadcastReceiver登録解除完了
+
+
+Log này tiếp tục khẳng định một vấn đề nghiêm trọng về logic trong bản APK hiện tại mà tôi đã phân tích lúc nãy:
+
+1. Tại sao App báo "認証成功" (Thành công) dù Device ID chưa đăng ký?
+Hãy nhìn vào kết quả phản hồi từ Server: {"status":2, "message":"デバイスID未登録"} (Mã trạng thái: 2, Tin nhắn: Device ID chưa đăng ký).
+
+Lỗi nằm ở dòng code này trong NewFaceAuthActivity.kt (Dòng 289):
+
+kotlin
+val isSuccess = (result.status == 0 || result.status == 2)
+Vấn đề: Code của bạn đang mặc định coi cả status = 0 (Thành công) và status = 2 (Lỗi ID chưa đăng ký) đều là THÀNH CÔNG (isSuccess = true).
+Hậu quả: Server trả về lỗi rõ ràng là "Chưa đăng ký thiết bị", nhưng App vẫn thản nhiên báo cho người dùng là "認証成功" (Xác thực thành công).
+2. Sự khác biệt cực kỳ quan trọng giúp bạn Debug Máy 1:
+Máy 2 (Của bạn): Bạn nhận được log FaceRecognitionApi: Success: .... Điều này chứng tỏ Mạng và SSL của Máy 2 hoàn toàn bình thường. Máy 2 đã gửi được ảnh lên Server và Server đã trả về dữ liệu (mặc dù dữ liệu là báo lỗi chưa đăng ký ID).
+Máy 1 (Khách hàng): Máy 1 báo "Network Error" (trả về null). Điều này có nghĩa là Máy 1 thậm chí còn chưa gửi được ảnh lên tới Server (bị chặn DNS, chặn SSL, chặn Port hoặc lỗi quyền đọc ảnh).
+Kết luận cho bạn:
+1. Về Logic App: Bạn cần phải sửa code để status = 2 phải là Thất bại, không được để là Thành công. Nếu không, khách hàng sẽ thấy rất vô lý khi thiết bị chưa đăng ký mà vẫn báo "Thành công".
+
+2. Về lỗi "Network Error" của Máy 1: Bây giờ bạn đã biết cách xem log chuẩn, hãy làm đúng bước cuối cùng:
+
+Chạy adb logcat trên Máy 1 khi dùng URL chuẩn.
+Nếu Máy 1 hiện log Exception: ... (giống như các ví dụ bạn làm nãy giờ), hãy gửi cho tôi. Đó chính là "chìa khóa" cuối cùng để mở ra nguyên nhân Máy 1 bị lỗi mạng.
+Tôi tin rằng Máy 1 sẽ hiện lỗi SSL hoặc Connection Timeout do mạng của khách hàng chặn!_
+
+ở 2 lỗi nên hãy log lai lỗi vấn đề de sau này tôi sẽ sửa vào file C:\Users\thangpv\Palm\android-1125\newrequest_readme.md tu dong 332
+Tôi đã cập nhật xong các phát hiện quan trọng vào file newrequest_readme.md.
+
+Tóm tắt các vấn đề đã xác định:
+Lỗi Logic xác thực giả: App đang coi status = 2 (Chưa đăng ký thiết bị) là thành công. Điều này cần được sửa trong NewFaceAuthActivity.kt sau này.
+Lỗi thông báo "Mạng" chung chung: Hiện tại mọi lỗi (Sai URL, Lỗi SSL, Không đọc được file) đều báo là "Network Error", gây khó khăn cho việc debug tại hiện trường.
+Hiện tại bạn đã có đầy đủ "vũ khí" để debug Máy 1:
+Lệnh logcat chuẩn: adb logcat -s FaceRecognitionApi NewFaceAuthActivity
+Cách đọc lỗi: Bạn đã biết cách phân biệt lỗi nhập sai URL (MalformedURLException) và lỗi DNS (Unable to resolve host).
+Việc còn lại: Khi nào bạn có điều kiện truy cập vào Máy 1 (Khách hàng), hãy chạy lệnh logcat và thực hiện quét mặt. Dòng log E FaceRecognitionApi: Exception: ... sẽ cho bạn biết chính xác tại sao máy đó bị lỗi (do SSL, do chặn mạng, hay do quyền đọc file).

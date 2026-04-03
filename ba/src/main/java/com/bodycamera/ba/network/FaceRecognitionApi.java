@@ -28,12 +28,13 @@ public class FaceRecognitionApi {
         HttpURLConnection connection = null;
         try {
             if (!imageFile.exists()) {
-                Log.e(TAG, "Image file not found: " + imageFile.getPath());
-                return null;
+                // ログ: 分析向けにフルパスを記録
+                Log.e(TAG, "★ [API ERROR] Image file not found: " + imageFile.getPath());
+                return "{\"status\":-1, \"message\":\"[エラー] 画像ファイルが見つかりません\"}";
             }
 
             String timestamp = String.valueOf(System.currentTimeMillis());
-            URL url = new URL(serverUrl);
+            URL url = new java.net.URI(serverUrl).toURL();
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(15000);
@@ -94,9 +95,41 @@ public class FaceRecognitionApi {
 
             return responseBody;
 
+        } catch (IllegalArgumentException e) {
+            // URLの構成（スキームが不正です
+            Log.e(TAG, "★ [API ERROR] URL Argument Error | URL: " + serverUrl + " | " + e.toString(), e);
+            return "{\"status\":-1, \"message\":\"[エラー] URL形式不正\"}";
+        } catch (java.net.URISyntaxException | java.net.MalformedURLException e) {
+            Log.e(TAG, "★ [API ERROR] Invalid URL Configuration | URL: " + serverUrl + " | " + e.toString(), e);
+            return "{\"status\":-1, \"message\":\"[エラー] URL形式不正\"}";
+        } catch (java.net.SocketTimeoutException e) {
+            Log.e(TAG, "★ [API ERROR] Connection Timeout | URL: " + serverUrl + " | " + e.toString(), e);
+            return "{\"status\":-1, \"message\":\"[エラー] タイムアウト: サーバー無応答\"}";
+        } catch (java.net.UnknownHostException e) {
+            Log.e(TAG, "★ [API ERROR] DNS Resolution Failed | URL: " + serverUrl + " | " + e.toString(), e);
+            return "{\"status\":-1, \"message\":\"[エラー] DNS: サーバーが見つかりません\"}";
+        } catch (javax.net.ssl.SSLHandshakeException e) {
+            Log.e(TAG, "★ [API ERROR] SSL Handshake Failed | URL: " + serverUrl + " | " + e.toString(), e);
+            return "{\"status\":-1, \"message\":\"[エラー] SSL証明書エラー\"}";
+        } catch (java.io.FileNotFoundException e) {
+            Log.e(TAG, "★ [API ERROR] File Access Denied | " + e.toString(), e);
+            return "{\"status\":-1, \"message\":\"[エラー] 画像アクセス権限なし\"}";
+        } catch (NullPointerException e) {
+            Log.e(TAG, "★ [API ERROR] Null Pointer | " + e.toString(), e);
+            return "{\"status\":-1, \"message\":\"[エラー] 設定項目が不足しています\"}";
         } catch (Exception e) {
-            Log.e(TAG, "Exception: " + e.getMessage(), e);
-            return null;
+            Log.e(TAG, "★ [API ERROR] Unexpected Error | URL: " + serverUrl + " | " + e.toString(), e);
+
+            // ユーザー向けのメッセージを整理
+            String simpleName = e.getClass().getSimpleName();
+            String displayMsg = simpleName;
+
+            // 特定の難解なエラーを親切な日本語に変換
+            if ("IllegalArgumentException".equals(simpleName)) {
+                displayMsg = "URL形式不正 (設定を再確認してください)";
+            }
+
+            return "{\"status\":-1, \"message\":\"[エラー] " + displayMsg + "\"}";
         } finally {
             if (connection != null) {
                 connection.disconnect();

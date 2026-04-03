@@ -115,4 +115,29 @@
 - **Comment**: Tiếng Nhật
 - **Style**: OOP
 - **Log debug**: Thêm dấu `★` để dễ filter trong Logcat
-- **Build**: `$env:JAVA_HOME="C:\Program Files\Java\jdk-21"; .\gradlew assembleDebug`
+- **Build**: $env:JAVA_HOME="C:\Program Files\Java\jdk-21"; .\gradlew assembleDebug
+
+---
+
+## Session Update: April 03, 2026
+
+### 1. Robust API Error Handling (`FaceRecognitionApi.java`)
+- **JSON Error Response**: Instead of returning `null` on failure, the API now returns a structured JSON string `{"status": -1, "message": "..."}` for all network and configuration errors.
+- **Specific Error Detection**: 
+    - Detailed `catch` blocks for `Timeout`, `DNS (UnknownHost)`, `SSL Handshake`, `FileNotFound (Permissions)`, and `MalformedURL`.
+    - Friendly Japanese error messages are returned in the JSON for direct UI display (e.g., "[エラー] SSL証明書エラー").
+- **Improved Logging**: All errors are logged with a `★ [API ERROR]` prefix, including the target URL and full exception trace.
+
+### 2. Android 11+ File Access & Permission (`NewFaceAuthActivity.kt`)
+- **`MANAGE_EXTERNAL_STORAGE`**: Added a proactive check and redirection to the System Settings for "All Files Access" (API 30+). This ensures the app can reliably read image files shared by the Maker App.
+- **Detailed API Result Parsing**:
+    - **Status Logic**: Refined success criteria to handle `status: 2` cases where the server indicates success but with additional informational messages (e.g., "認証成功かつ勤怠APIエラー").
+    - **Fallback Protection**: Maintained a legacy `null` check as a "defense-in-depth" measure, though the API now handles most cases via JSON.
+
+### 3. Identity Propagation & Accuracy Fixes (Bug2 & Identity Leakage)
+- **TopActivity.kt & NewFaceAuthActivity.kt**: 
+    - **`candidate_names`**: Now passing a list of names corresponding to the `candidate_list` (IDs). This allows `TopActivity` to look up the exact name after a successful Vein scan in Flow 3.
+    - **Cache Clearing**: Fixed "Identity Leakage" by explicitly clearing the `faceCandidateMap` whenever a new authentication starts or an auto-loop occurs.
+- **Bug Fix**: Only `status: 0` (or `status: 2` with specific success text) is now treated as a successful authentication, preventing "Device Not Registered" errors from appearing as successes.
+
+---
